@@ -1,0 +1,24 @@
+- id: skill-filesystem
+  disabled: false
+  config:
+    customSkillDirs:
+      - D:\dsh-app\.dsh\skills
+- id: tool-skill
+  disabled: false
+- id: tool-pwsh
+  disabled: false
+- id: tool-fs
+  disabled: false
+- id: tool-fs-search
+  disabled: false
+- id: tool-jobs
+  disabled: false
+- insert:
+    - id: mcp-dj
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: dj
+        transport: streamable-http
+        url: http://127.0.0.1:8010/mcp
+        toolCallTimeoutMs: 1800000
+        failOnStartupError: true

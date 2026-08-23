@@ -1,0 +1,6 @@
+# Local credentials for the Data-Juicer plan-flow MCP.
+dj-plan-flow.env
+
+# Installed dependencies and local runtime artifacts.
+node_modules/
+*.log
