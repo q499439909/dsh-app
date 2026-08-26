@@ -1,5 +1,7 @@
 param(
-    [int]$Port = 0,
+    [ValidateRange(1, 65535)]
+    [int]$Port = 57035,
+    [ValidateRange(1, 65535)]
     [int]$McpPort = 8010,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$DshArgs
@@ -73,6 +75,60 @@ function Test-TcpPort {
     }
 }
 
+function Get-ListeningProcess {
+    param([int]$TargetPort)
+
+    $listener = Get-NetTCPConnection `
+        -LocalAddress '127.0.0.1' `
+        -LocalPort $TargetPort `
+        -State Listen `
+        -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $listener) {
+        return $null
+    }
+
+    return Get-CimInstance Win32_Process `
+        -Filter "ProcessId=$($listener.OwningProcess)" `
+        -ErrorAction SilentlyContinue
+}
+
+function Test-IsExpectedDshWebProcess {
+    param(
+        [AllowNull()]
+        $Process,
+        [int]$TargetPort
+    )
+
+    if ($null -eq $Process -or [string]::IsNullOrWhiteSpace($Process.CommandLine)) {
+        return $false
+    }
+
+    $commandLine = [string]$Process.CommandLine
+    return (
+        $Process.Name -eq 'node.exe' -and
+        $commandLine.IndexOf($dshBin, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $commandLine.IndexOf($patchFile, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $commandLine -match '(?:^|\s)web(?:\s|$)' -and
+        $commandLine -match "--port\s+$TargetPort(?:\s|$)"
+    )
+}
+
+function Get-OtherDshWebProcesses {
+    param([int]$ExceptPort)
+
+    return @(
+        Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $commandLine = [string]$_.CommandLine
+            $commandLine.IndexOf($dshBin, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+            $commandLine.IndexOf($patchFile, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+            $commandLine -match '(?:^|\s)web(?:\s|$)' -and
+            $commandLine -notmatch "--port\s+$ExceptPort(?:\s|$)"
+        }
+    )
+}
+
 function Start-ProcessWithEnvironment {
     param(
         [Parameter(Mandatory = $true)]
@@ -116,6 +172,8 @@ if (-not (Test-TcpPort -TargetPort $McpPort)) {
         TEMP = $mcpTempDir
         TMP = $mcpTempDir
         TMPDIR = $mcpTempDir
+        PYTHONUTF8 = '1'
+        PYTHONIOENCODING = 'utf-8'
     }
     $allowedMcpEnvironmentNames = @(
         'OPENAI_API_KEY',
@@ -156,41 +214,72 @@ if (-not (Test-TcpPort -TargetPort $McpPort)) {
     Write-Warning "Using the MCP process already listening on port $McpPort. The current $mcpEnvFile was not reloaded; restart that MCP process after changing credentials or server code."
 }
 
-if ($Port -gt 0) {
-    $port = $Port
-} else {
-    $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-    $probe.Start()
-    $port = ([System.Net.IPEndPoint]$probe.LocalEndpoint).Port
-    $probe.Stop()
+$otherDshProcesses = Get-OtherDshWebProcesses -ExceptPort $Port
+if ($otherDshProcesses.Count -gt 0) {
+    $descriptions = @(
+        $otherDshProcesses | ForEach-Object {
+            $otherPort = if ([string]$_.CommandLine -match '--port\s+(\d+)') { $matches[1] } else { 'unknown' }
+            "PID $($_.ProcessId) on port $otherPort"
+        }
+    )
+    Write-Warning (
+        "Other DSH Web processes are still running: $($descriptions -join ', '). " +
+        "They are not stopped automatically; close them after confirming they are no longer needed."
+    )
 }
 
-$url = "http://127.0.0.1:$port/"
-$dshArgumentList = @($dshBin, 'web', '--patch', $patchFile, '--host', '127.0.0.1', '--port', [string]$port, '--no-open')
+$url = "http://127.0.0.1:$Port/"
+$listeningProcess = Get-ListeningProcess -TargetPort $Port
+if ($null -ne $listeningProcess) {
+    if (-not (Test-IsExpectedDshWebProcess -Process $listeningProcess -TargetPort $Port)) {
+        throw "Port $Port is already owned by PID $($listeningProcess.ProcessId), which is not the expected DSH Web process."
+    }
+
+    Write-Host "Using existing DSH DJ at $url (PID $($listeningProcess.ProcessId))"
+    Start-Process $url
+    exit 0
+}
+
+$dshArgumentList = @($dshBin, 'web', '--patch', $patchFile, '--host', '127.0.0.1', '--port', [string]$Port, '--no-open')
 if ($null -ne $DshArgs) {
     $dshArgumentList += @($DshArgs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 }
 
 Write-Host "Starting DSH DJ at $url"
-$process = Start-Process -FilePath 'node.exe' -ArgumentList $dshArgumentList -WorkingDirectory $dshRoot -WindowStyle Hidden -PassThru
+$process = $null
+try {
+    $process = Start-Process `
+        -FilePath 'node.exe' `
+        -ArgumentList $dshArgumentList `
+        -WorkingDirectory $dshRoot `
+        -WindowStyle Hidden `
+        -PassThru
 
-for ($attempt = 0; $attempt -lt 40 -and -not $process.HasExited; $attempt++) {
-    Start-Sleep -Milliseconds 250
-    try {
-        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1
-        if ($response.StatusCode -eq 200) {
-            Start-Process $url
-            Wait-Process -Id $process.Id
-            exit $process.ExitCode
+    for ($attempt = 0; $attempt -lt 40 -and -not $process.HasExited; $attempt++) {
+        Start-Sleep -Milliseconds 250
+        try {
+            $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1
+            if ($response.StatusCode -eq 200) {
+                Start-Process $url
+                Wait-Process -Id $process.Id
+                exit $process.ExitCode
+            }
+        } catch {
+            # The server is still booting.
         }
-    } catch {
-        # The server is still booting.
+    }
+
+    if ($process.HasExited) {
+        exit $process.ExitCode
+    }
+
+    throw "DSH did not become ready at $url within 10 seconds."
+} finally {
+    if ($null -ne $process) {
+        $runningProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
+        if ($null -ne $runningProcess) {
+            Write-Host "Stopping DSH DJ process PID $($process.Id)"
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        }
     }
 }
-
-if ($process.HasExited) {
-    exit $process.ExitCode
-}
-
-Stop-Process -Id $process.Id -Force
-throw "DSH did not become ready at $url within 10 seconds."

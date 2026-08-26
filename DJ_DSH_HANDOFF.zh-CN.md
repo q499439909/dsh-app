@@ -1,271 +1,800 @@
-# Data-Juicer + DSH 中文交接文档
+# Data-Juicer + DeepSeek Harness Plan-Flow 接手文档
 
-## 目标
+最后更新：2026-08-25
 
-在 Windows 上将 Data-Juicer（DJ）接入 DeepSeek Harness（DSH），形成可控、可复现的数据处理流程：
+## 0. 2026-08-25 当前摘要（接手先读）
 
-1. 模型先检查并分析数据；
-2. 给出处理方案，等待用户明确确认；
-3. 保存可审计、可复跑的 recipe；
-4. 校验并执行这份固定 recipe；
-5. 检查输出并记录结果。
+本轮仍在完成同一个目标：以单个 DSH Agent 为推理和交互主体，以 Data-Juicer 本体和小型 `plan-flow` MCP 提供事实、校验、版本、审批和执行；不重新引入 DJAgent，也不增加嵌套 Agent。
 
-下一段对话要重点讨论：不要继续依赖 DJ 自带的一次性 MCP 执行方式，而是设计一个 plan-first MCP 适配层。
+### 当前运行状态
 
-## 三个目录的职责
+当前已确认的运行状态：
 
 ```text
-D:\dsh-app  DSH 程序壳、DSH 配置、启动器、DSH Skills
-D:\dj       Data-Juicer 安装目录和 Python 虚拟环境
-D:\shishi   用户在 DSH Web 中选定的数据工作区
-```
+http://127.0.0.1:8010/mcp
+  当前正式 plan-flow MCP
+  PID 38776
+  D:\dj\.envs\dsh-dj\python.exe
 
-这三个角色必须分开理解。DJ 依赖可以放在 `D:\dj`，但用户数据、输出、recipe、执行清单和临时运行文件应放在当前工作区；当前工作区是 `D:\shishi`。
+http://127.0.0.1:57035/
+  当前唯一 DSH Web
+  PID 37808
 
-## 当前运行状态
-
-通常通过下列地址打开 DJ 版 DSH Web：
-
-```text
-http://127.0.0.1:49429/
-```
-
-DJ 自带 `recipe-flow` MCP 服务配置为：
-
-```text
 http://127.0.0.1:8000/mcp
+  仍有历史 data-juicer-agents 环境进程
+  DSH 的 dj-dsh.patch.yml 不指向它；不要误拿 8000 做当前验收
 ```
 
-`D:\dsh-app\web-dj.cmd` 会调用 `web-dj.ps1`。这个 PowerShell 启动器会：
+### 已经完成了什么
 
-- 若 8000 端口未监听，则启动 DJ MCP 服务；
-- 使用 `D:\dsh-app\dj-dsh.patch.yml` 启动带 DJ 配置的 DSH；
-- 启动 MCP Python 进程时设置 `TEMP`、`TMP`、`TMPDIR` 为 `D:\shishi\.dj\tmp`；
-- 在指定端口启动 DSH，通常是 49429。
+当前已经完成并实测：
 
-注意：停止或重启启动器会中断正在执行的 MCP 调用。之前至少有一次真实 `run_data_recipe` 调用在重启中被中断，因此任何既有输出都必须检查，不能假设已完整完成。
+- 8010 MCP 已重启并加载媒体模态兼容与精确算子名兜底；
+- 通过活 MCP 精确查询 `image_tagging_vlm_mapper`、`modality=image`、`top_k=1`，当前准确只返回该算子；
+- `search_capabilities` 已保持一次返回候选完整 schema，并将默认值和服务端硬上限统一为 `top_k=5`；即使调用方传 10 或 30，每项也最多返回 5 个；
+- `runtime` 正确报告凭据、base URL 和 `qwen3.7-plus` VLM 默认模型均已配置，且不泄漏密钥；
+- `web-dj.ps1` 已改为默认固定/复用 57035、校验端口归属、告警其他 DSH Web，并清理脚本自己启动的 DSH 子进程；
+- 旧的多个 DSH Web 已清理，当前只剩 57035。
 
-## 已完成的工作
+### 当前进行到哪
 
-### Data-Juicer 已可用
+当前尚未完成：
 
-- 仓库：`D:\dj\data-juicer-agents`
-- Python：`D:\dj\data-juicer-agents\.venv\Scripts\python.exe`
-- CLI：`D:\dj\data-juicer-agents\.venv\Scripts\djx.exe`
-- `djx tool list` 已可运行。
-- 本地算子目录的 `retrieve_operators` 已测试成功。
+- 一次有界完整检索已经实施，但四个互相重叠的需求仍会返回约 43 KB；需要在真实任务中验证 DSH 是否会先归并原子能力，避免重复搜索同一个 VLM 实现；
+- 尚未实现基于下游步骤依赖的 material 参数记录与更强 `prepare_plan` 校验；当前主要依赖 DSH + Skill 从真实 schema 做语义判断；
+- 尚未修改 `_stats.jsonl` 的关联字段或实现 clean/full/selected stats 输出策略；
+- 一个历史 session 日志已确认存在重复 `seq=3`，数据仍在但尚未修复；
+- 尚未完成新的真实小样本端到端任务验收。
 
-不要轻易把 `D:\dj\data-juicer-1.5.4` 以 editable 方式安装到当前环境；该机器可能缺少原生编译依赖。当前可用运行时是虚拟环境中已经安装的包。
+### 下一步计划
 
-### DSH Skills 已接入
+接手后优先做：先修复或隔离损坏 session，然后用 57035 + 8010 新建会话验证一次有界完整检索和真实小样本任务。不要继续通过堆查询词规避检索接口的问题。
 
-十个 DSH 兼容的 DJ Skill 位于：
+## 1. 我们在做什么
+
+目标是脱离 DJAgent 框架，只使用一个 DeepSeek Harness（DSH）Agent、Data-Juicer（DJ）本体与一个小而稳定的 `plan-flow` MCP，完成可审查、可复现、可版本化的数据处理。
+
+MCP 不是第二个 Agent。DSH 负责需求澄清、规划和判断；MCP 只负责输入检查、算子发现、严格校验、持久化、审批状态和执行。
+
+目标流程：
+
+1. 缺少关键选择时，DSH 用 `ask_user_question` 追问；
+2. 需求完整后先梳理输入、输出、目标、约束和验收标准，再弹窗确认；
+3. 检查输入并检索 DJ 算子；
+4. DJ 能覆盖的步骤放进 `recipe.process`，真正的 gap 由 DSH 编写通用 Python 后处理；
+5. 保存不可变 `plan_vNNN`；
+6. 展示 Plan、重要参数、风险、diff 和 `content_hash`，再次弹窗审批；
+7. 只执行被批准的准确版本；
+8. 保存日志、实际 recipe、输出和报告；
+9. 任何实质修改都创建新 Plan 版本并重新审批。
+
+## 2. 已确定的架构决策
+
+### 不再依赖 DJAgent
+
+DJAgent 的 `build_dataset_spec`、`build_process_spec`、`build_system_spec` 是为它自己的多阶段状态和职责分层设计的。DSH 本身已有规划能力，不需要安装 DJAgent 包，也不需要照搬三份 Spec 再合并。
+
+### 不使用旧一次性 Recipe-Flow 作为正式入口
+
+旧 `run_data_recipe` 在内存拼 recipe 后立即执行，没有可靠落盘的 Plan、版本、diff、审批状态、制品快照和执行清单。它适合实验，不适合正式流程。
+
+### 不把所有算子暴露成 MCP 工具
+
+MCP 只提供能力检索和九个工作流工具。DSH 通过 `search_capabilities` 获取真实算子 schema，再把选中的算子写入 Plan。这样避免巨大工具目录，也避免找不到某个算子时无限搜索。
+
+### Plan 是主工件，Recipe 是执行器视图
+
+Plan 面向用户、审查、版本和复现；`recipe` 只是 Plan 中给 DJ 使用的部分。顶层 `postprocess` 可以包含通用 Python 脚本，不会传给 DJ。执行时可按具体执行器生成 `materialized-recipe.yaml`。
+
+## 3. 当前目录和运行环境
 
 ```text
-D:\dsh-app\.dsh\skills
+D:\dj\data-juicer-1.5.4
+  Data-Juicer 源码和 plan-flow MCP 实现
+
+D:\dj\.envs\dsh-dj
+  当前 MCP 使用的 Python 环境
+
+D:\dsh-app
+  DSH 程序壳、启动器、MCP 环境配置、Skills 和本文档
+
+<当前 DSH 会话工作区>
+  用户本次选择的数据、Plan、脚本、输出与报告
 ```
 
-主 Skill：
+工作区绝不能写死。DJ 源码目录、MCP cwd 和 DSH 安装目录都不是业务工作区。
+
+关键文件：
 
 ```text
-D:\dsh-app\.dsh\skills\data-juicer\SKILL.md
-```
+D:\dj\data-juicer-1.5.4\data_juicer\tools\plan_flow\
+  common.py       路径、原子写入、锁、hash、错误类型
+  discovery.py    输入检查、算子检索、runtime 状态
+  validation.py   Plan/recipe/算子/路径/密钥/脚本校验
+  store.py        task、Plan 版本、审批和制品快照
+  runner.py       异步执行、状态、日志、后处理和报告
+  service.py      应用服务
+  server.py       FastMCP 适配层
 
-DSH 要求 Skill 名称使用 kebab-case，因此原 CoPAW 的下划线命名已转换。`prepare-dj-skills.ps1` 会从 CoPAW 源文件重新生成十个 Skill、替换命名、将文本转为 ASCII 以避免编码乱码，并重新写入本地规则。
-
-主 Skill 已包含确认门：
-
-- 检查数据、检索算子、分析方案可以在未确认时进行；
-- 写 recipe 或处理数据前，必须展示输入输出路径、算子、参数、预期效果、风险、校验方式和超时设置；
-- `好`、`继续`、CLI 的 `--yes` 和工具参数中的 `confirm: true` 都不算用户确认；
-- 必须等待用户后续明确确认；
-- 如果路径或关键参数变化，必须重新确认。
-
-主 Skill 目前写有“优先使用 `mcp__dj__*` 工具”的规则。完成 plan-first MCP 后，应重新检查这条规则是否要改成仅优先使用新的正式 MCP 工具。
-
-### DSH MCP 配置已接入
-
-配置文件：
-
-```text
+D:\dj\data-juicer-1.5.4\data_juicer\tools\DJ_mcp_plan_flow.py
+D:\dj\data-juicer-1.5.4\data_juicer\tools\mcp_server.py
+D:\dsh-app\.dsh\skills\data-juicer-plan-flow-zh\SKILL.md
+D:\dsh-app\.dsh\skills\data-juicer-plan-flow\SKILL.md
+D:\dsh-app\web-dj.ps1
 D:\dsh-app\dj-dsh.patch.yml
+D:\dsh-app\dj-plan-flow.env
 ```
 
-该文件启用了 Skill、PowerShell、文件系统、搜索和 jobs，并插入了 MCP 客户端实例：
+用户已自行修改中文版 Skill，接手时不要无意覆盖。
+
+## 4. 当前 MCP 接口
+
+当前只暴露九个工具：
+
+| 工具 | 作用 |
+|---|---|
+| `inspect_input` | 检查输入；原始媒体目录会生成 DJ JSONL manifest |
+| `search_capabilities` | 检索算子、参数 schema、兼容性和能力 gap |
+| `prepare_plan` | 规范化、校验并保存新 `plan_vNNN` |
+| `get_plan` | 读取 Plan、校验、diff、审批和版本列表 |
+| `preview_plan` | 显示准确执行预览，不处理数据 |
+| `approve_plan` | 按 `task_id + plan_version + content_hash` 批准准确版本 |
+| `run_plan` | 异步启动已批准 Plan |
+| `get_run` | 查询运行状态、日志、输出和报告 |
+| `cancel_run` | 停止运行中的 worker |
+
+没有继续拆 `build_dataset_spec`、`build_process_spec`、`build_system_spec`。对于单 Agent DSH，这些是内部思考维度，不应扩大 MCP 接口。
+
+## 5. Plan 格式和 DJ/通用脚本分工
 
 ```yaml
-- insert:
-    - id: mcp-dj
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: dj
-        transport: streamable-http
-        url: http://127.0.0.1:8000/mcp
-        toolCallTimeoutMs: 1800000
-        failOnStartupError: true
+user_intent: "..."
+modality: image
+risk_notes: []
+acceptance_criteria: []
+approval_required: true
+
+recipe:
+  dataset_path: "..."
+  export_path: processed.jsonl
+  process:
+    - some_dj_operator:
+        important_parameter: value
+  executor_type: default
+  np: 4
+
+postprocess:
+  - kind: python
+    script: scripts/finish.py
+    arguments: {}
 ```
 
-新增 DSH 插件时必须使用 `- insert:`。只写 `- id: mcp-dj` 会失败，因为普通 patch 只能覆盖已经存在的插件项。
+规则：
 
-### 当前 Recipe-Flow MCP 已连通
+- `recipe` 只包含 DJ 能识别的配置；
+- `postprocess` 是 Plan 顶层字段，不进入 DJ recipe；
+- DSH 决定哪些步骤由 DJ 做，哪些是真正的 gap；
+- 聚焦检索后仍无合适算子，就使用受审查的通用 Python 制品；
+- 猫狗拆分只是历史示例，没有写进代码；
+- 执行器会生成具体 DJ 使用的 materialized recipe；
+- Windows 下会把 `dataset_path` 改写成结构化 local dataset，避免反斜杠被 CLI parser 当 shell escape。
 
-DSH 已成功连接并发现以下五个 MCP 工具：
+## 6. 工作区识别
+
+当前 `@deepseek-ai/dsh-mcp-client` 没有实现 MCP Roots，初始化 capability 为空，协议不会自动发送当前工作区。
+
+现行方案：
+
+1. DSH 会话取得当前用户选择的工作区；
+2. 每个工作区相关调用显式传绝对 `workspace_root`；
+3. 所有相对输入、脚本和输出路径都从该根目录解析；
+4. MCP 拒绝逃逸工作区的路径；
+5. 返回值回显规范化后的 `workspace_root`。
+
+不要增加全局 `set_workspace`。HTTP MCP 可能服务多个会话，全局可变目录会串工作区。也不要用启动环境变量固定某个业务工作区。
+
+旧错误曾把相对输入按 MCP cwd 解析到 DJ 源码树，导致 DSH 要求复制数据或提升权限。现已由 `resolve_workspace_path()` 修复，并要求工作区必须是绝对路径。
+
+## 7. 持久化和版本管理
 
 ```text
-mcp__dj__get_global_config_schema
-mcp__dj__get_dataset_load_strategies
-mcp__dj__search_ops
-mcp__dj__run_data_recipe
-mcp__dj__analyze_dataset
+<workspace>\.dj\inputs\input_<id>\
+  manifest.jsonl
+  input.json
+
+<workspace>\.dj\tasks\task_<id>\
+  task.yaml
+  current.json
+  plans\plan_v001\
+    plan.yaml
+    validation.json
+    diff.json
+    content-hash.txt
+    approval.json          仅批准后存在
+    artifacts\            后处理脚本等快照
+  plans\plan_v002\...
+  runs\run_r001\
+    run.json
+    materialized-recipe.yaml
+    report.md
+    logs\stdout.log
+    logs\stderr.log
+    logs\postprocess-*.log
+
+<workspace>\outputs\<task-slug>\plan_vNNN\run_rNNN\
 ```
 
-当前实际运行的虚拟环境文件：
+不变量：
+
+- 每次 `prepare_plan` 都创建新版本，绝不覆盖；
+- 修改时复用 `task_id` 并传上一版 `base_plan_version`；
+- 无效 Plan 也保存审计，但不能批准；
+- `content_hash` 覆盖规范化 Plan 和制品内容；
+- Plan 或制品被修改会触发 `PLAN_TAMPERED`；
+- 只有 hash 匹配的有效 Plan 才能批准；
+- `run_plan` 会再次检查 bundle 和审批 hash；
+- 每次运行都有独立 `run_rNNN` 和输出目录。
+
+hash 用于完整性和审批内容绑定，不是为了堆很多 hash，也不能单独证明 UI 中有真人点击。
+
+## 8. 两道 UI 确认
+
+### 需求确认
+
+- 缺少会改变流水线的信息时必须调用 `ask_user_question`；
+- 即使需求完整，也要先梳理输入、输出、目标、约束和验收标准；
+- 再弹出“确认并开始规划 / 修改需求 / 取消任务”；
+- 原始请求本身不算确认。
+
+### Plan 审批
+
+- `prepare_plan` 后展示 recipe、重要参数、后处理、风险、校验、diff 和 `content_hash`；
+- 再弹出“批准并执行 / 修改计划 / 取消任务”；
+- 只有准确选择“批准并执行”才能调用 `approve_plan` 和 `run_plan`；
+- 新 Plan 版本必须重新审批。
+
+当前 UI 调用由 Skill 强约束。MCP 只能验证 hash，不能证明批准一定来自 UI 真人回答。如果未来要求技术上不可绕过，需要增加一个小型 DSH 审批桥接插件，由它调用 `ctx.userQuestions.ask()` 后再批准。这是工具适配器，不是第二个 Agent。
+
+## 9. API、环境变量和 VLM
+
+正确链路：
 
 ```text
-D:\dj\data-juicer-agents\.venv\Lib\site-packages\data_juicer\tools\mcp_server.py
-D:\dj\data-juicer-agents\.venv\Lib\site-packages\data_juicer\tools\DJ_mcp_recipe_flow.py
-D:\dj\data-juicer-agents\.venv\Lib\site-packages\data_juicer\tools\DJ_mcp_granular_ops.py
-D:\dj\data-juicer-agents\.venv\Lib\site-packages\data_juicer\tools\mcp_tool.py
+D:\dsh-app\dj-plan-flow.env
+  -> web-dj.ps1 启动时读取
+  -> MCP Server 进程环境
+  -> runner 子进程继承
+  -> DJ API 算子读取环境变量
 ```
 
-`D:\dj\data-juicer-1.5.4` 中也有源码副本，但其哈希与当前虚拟环境不同；改那个源码副本不会影响正在运行的 MCP。
+算子和 DSH 都不得自行寻找或读取 `.env`。Plan、工具参数、日志、报告和本文档都不得包含密钥。
 
-## 已确认的重要结论
-
-### 自带 Recipe-Flow 不是可保存 Recipe 的工作流
-
-`run_data_recipe` 只是把 `dataset_path`、`process`、`export_path`、`np` 和可选 `extra_config` 组成内存字典，然后立刻调用 `execute_op`。
-
-它不会：
-
-- 生成 plan ID；
-- 保存 YAML 或 JSON recipe；
-- 提供 dry-run；
-- 生成可复现的已解析配置或执行清单；
-- 强制要求人类确认。
-
-它最终只返回输出路径。DSH 的工具调用历史和 MCP 服务端日志也许能看到参数，但二者都不是可审计的 recipe 工件。因此，自带 `recipe-flow` 适合快速实验，不适合正式、可复现的数据处理。
-
-### Granular-Operators 也不能自动构建管道
-
-`granular-ops` 会把每个算子动态暴露为一个 MCP 工具。每次调用只创建一个算子的 `process` 列表，并立刻执行 `execute_op`。
-
-它不会把多个调用累积为一个 pipeline，也不会保存组合后的 recipe。默认还可能暴露非常大的工具目录。可以通过 `DJ_OPS_LIST_PATH` 限制暴露的算子集合，但这只能控制工具数量，不能解决可复现性问题。
-
-Granular-Operators 适合单算子参数实验，例如单独比较一个去重算子的阈值；不适合作为正式流水线的主编排接口。
-
-### Windows 临时文件问题已修复
-
-原始错误：
+启动器允许注入：
 
 ```text
-PermissionError: [Errno 13] Permission denied: ...job_dj_config_....json
+OPENAI_API_KEY
+DASHSCOPE_API_KEY
+SK
+OPENAI_BASE_URL
+OPENAI_API_URL
+DASHSCOPE_BASE_URL
+DJ_VLM_MODEL
+DASHSCOPE_DEFAULT_MODEL
+OPENAI_DEFAULT_MODEL
 ```
 
-`TEMP/TMP` 设置实际上已生效，临时文件确实进入 `D:\shishi\.dj\tmp`。真正原因不是目录无权限，而是 Windows 文件锁：`get_init_configs()` 使用 `tempfile.NamedTemporaryFile(delete=True)` 创建并保持打开临时文件，然后让 `jsonargparse` 按路径再次打开它；Windows 会拒绝这次重新打开。
+环境变量是启动时快照。修改 `.env` 后必须重启 MCP。若 8010 已有进程，启动器会复用它并警告 `.env` 没有重新加载。
 
-已经修改实际运行时文件：
+MCP 通过安全的 `runtime` 告诉 DSH 配置状态：
 
-```text
-D:\dj\data-juicer-agents\.venv\Lib\site-packages\data_juicer\config\config.py
+```json
+{
+  "api_credentials_configured": true,
+  "api_base_url_configured": true,
+  "vlm_model_configured": true,
+  "default_models": {
+    "vlm": {
+      "configured": true,
+      "model": "qwen3.7-plus",
+      "role": "vision-language",
+      "source": "server_environment"
+    }
+  }
+}
 ```
 
-修复逻辑为：使用 `delete=False` 创建文件，写完并关闭后再调用 `init_configs`，最后在 `finally` 中删除临时文件。直接执行 `get_init_configs()` 的验证已返回 `CONFIG_OK`。
+只公开非秘密的模型 ID 和角色，不返回 key。DSH 只能信任该对象，不能缺字段时读取配置文件兜底。
 
-这是对虚拟环境 site-package 的修改。更新或重装 `py-data-juicer` 后可能被覆盖；长期应将它做成受控的本地补丁或提交上游。
+历史上 DSH 因模型名没有 `vl`，误判 `qwen3.7-plus` 不是视觉模型，并想换成 `qwen-vl-max`。该判断错误；官方说明 `qwen3.7-plus` 支持文本、图像和视频输入。
 
-## 推荐的下一步架构：Plan-First MCP
+现行规则：
 
-不要继续把 `run_data_recipe` 扩展为一次性执行工具。应新增一个独立 MCP 模式或本地适配器，例如 `plan-flow`，接口保持小而明确：
+- `DJ_VLM_MODEL` 是服务器声明的 VLM 默认模型；
+- 不得按模型名猜模态或自行换模型；
+- 用户明确要求时才允许 Plan 覆盖模型；
+- API VLM 算子设置 `is_api_model: true`，通常省略 `api_or_hf_model`；
+- `prepare_plan` 会把服务器默认模型写入规范化 Plan；
+- 缺显式模型且缺 `DJ_VLM_MODEL` 时返回 `RUNTIME_VLM_MODEL_MISSING`。
+
+## 10. 算子检索和 gap
+
+`search_capabilities` 返回算子的名称、说明、tags、真实参数 schema、`executor_compatible`、`modality_compatible`，以及无候选时的 gap 提示。
+
+已修复两类检索问题：
 
 ```text
-analyze_dataset
-search_ops
-prepare_recipe
-save_recipe
-validate_recipe
-run_recipe
-inspect_output
+image -> image OR multimodal
+video -> video OR multimodal
+audio -> audio OR multimodal
 ```
 
-建议行为：
+query 精确等于算子名时，直接将算子置顶，不再被 BM25 或 tag 过滤误删；即使模态不兼容也返回并用 `modality_compatible` 提示。
 
-1. `prepare_recipe` 接收意图和已选算子，规范化顺序和参数，返回标准 recipe 对象与内容 hash，但不写数据。
-2. `save_recipe` 在当前工作区保存 YAML，例如 `D:\shishi\.dj\plans\<name>.yaml`。
-3. `validate_recipe` 只加载并校验固定 YAML，不处理数据。
-4. `run_recipe` 只接受已保存的 recipe 路径和明确确认参数；写入执行清单，记录 recipe hash、DJ 版本、开始结束时间、输入输出路径和统计结果。
-5. `inspect_output` 输出结果画像，并关联到执行清单。
+实例：`image_tagging_vlm_mapper` 的 tags 是 `gpu, api, vllm, multimodal`。旧逻辑用 `modality=image` 会在排名前过滤掉它；现在精确 query 且 `top_k=1` 能正确返回。
 
-现有 `djx` Harness 已经包含接近这个流程的工具：`inspect_dataset`、`retrieve_operators`、`build_*`、`assemble_plan`、`plan_save`、`apply_recipe`。最好的新 MCP 是将这些 plan 导向能力暴露出去，而不是再发明一套不兼容 recipe 格式。
+DSH 不应无限寻找不存在的算子。换合适的需求描述或精确算子名聚焦检索一次；仍不合适就标记 gap 并规划通用脚本。
 
-## 需要讨论的三种实现路线
+### 2026-08-25 真实 DSH 检索故障复盘
 
-### 方案 A：直接修改自带 Recipe-Flow
+真实 DSH 会话首轮用四条长中文需求搜索，全部返回 `gap`。第二轮改用英文后找到了 `image_deduplicator` 和 `vlm_ray_vllm_engine_pipeline`，但多轮仍找不到 `image_tagging_vlm_mapper`。
 
-在 `DJ_mcp_recipe_flow.py` 中增加 `prepare_recipe`、`save_recipe`、`validate_recipe`、`run_recipe`，并修改 `mcp_server.py` 新增模式或扩展 `recipe-flow`。
-
-优点：
-
-- 最快；
-- 复用现有服务和 MCP 发现机制。
-
-缺点：
-
-- 修改虚拟环境包，升级会覆盖；
-- 将本地策略混进上游代码；
-- 必须谨慎控制 MCP 工具规模。
-
-### 方案 B：新增本地 Plan-Flow MCP 适配器
-
-在虚拟环境包之外新增一个有版本控制的本地模块，例如放在 `D:\dsh-app` 或独立扩展目录。它可调用现有 `djx` plan 工具或 DJ Python API，同时保持稳定的 plan-first 接口。
-
-优点：
-
-- 不会被 DJ 升级覆盖；
-- DSH 与 DJ 之间有清晰、可测试的接口；
-- 可以明确保存确认状态和执行清单；
-- 更适合独立测试和长期维护。
-
-缺点：
-
-- 初始实现工作更多。
-
-推荐方案：方案 B。
-
-### 方案 C：MCP 只做分析，CLI 继续正式执行
-
-现有 `recipe-flow` MCP 只用于 `analyze_dataset` 和 `search_ops`，正式执行继续使用 `djx plan_save + apply_recipe`。
-
-优点：
-
-- 立即具备可复现性；
-- 不需要先写新适配器。
-
-缺点：
-
-- 有两套执行表面；
-- 模型必须正确选择；
-- 不如统一的 plan-first MCP 整洁。
-
-在方案 B 完成前，方案 C 是最安全的过渡状态。
-
-## 不要重复踩的坑
-
-1. 不要混淆 DJ 安装目录和 DSH 选定的数据工作区。
-2. 不要在已占用端口上启动第二个 DSH 服务。
-3. 不要在真实 recipe 调用执行中重启 MCP 或 DSH。
-4. workspace-write 场景不要使用系统 Temp，应使用工作区内临时目录。
-5. 即使目录可写，也不要武断地把所有 `PermissionError` 归因于沙箱；这里真正原因是 Windows `NamedTemporaryFile` 锁。
-6. 不要把模型密钥、敏感样本或完整服务端配置写入 MCP 日志、recipe 或交接文档。
-7. 不要把 MCP 日志或模型工具调用历史当作可复现工件。
-8. 不要默认暴露全部 granular operators；需要时用白名单。
-9. 不要修改源码副本后假设运行时已改变；先确认实际 import 路径。
-10. DSH Skill 名称必须是 kebab-case，不能用 underscore_case。
-11. 即使执行从 CLI 迁移到 MCP，也必须保留“先分析、再确认、后执行”的确认门。
-12. DSH 新增插件时使用 `- insert:`；普通 id patch 只能覆盖已有插件。
-
-## 给下一段对话的建议提示词
+本轮没有只依赖本地复现，而是检查了 DSH 保存的完整 MCP spill：
 
 ```text
-阅读 D:\dsh-app\DJ_DSH_HANDOFF.zh-CN.md。请为 Data-Juicer 和 DSH 设计方案 B：本地 plan-first MCP 适配器。接口保持小：分析、检索、准备 recipe、保存、校验、执行、检查输出。适配器必须生成标准 YAML recipe 和执行清单，在执行前强制明确确认，以 D:\shishi 为活动工作区，且不得记录密钥。先给出设计和权衡，不要立即修改文件。
+C:\Users\hu\AppData\Local\Temp\dsh-spill-wuh8gZ\session-ea64a2b2b6d0\
+```
+
+三份完整响应确实没有 `image_tagging_vlm_mapper`，所以这次不是“算子已返回但 DSH 没读到”。随后直接调用活的 8010 MCP，精确查询也找不到；而同一个 Python 环境直接加载磁盘代码可以找到。
+
+最终根因是 8010 MCP 在 `discovery.py` 最终修改前已经启动，内存中仍是旧检索逻辑：
+
+```text
+旧逻辑：modality=image 只接受 image tag
+算子 tags：gpu, api, vllm, multimodal
+结果：image_tagging_vlm_mapper 在 BM25 前就被过滤
+```
+
+磁盘新代码已经实现 `image -> image OR multimodal` 和 exact-name 兜底，但 Python 进程不会热加载；`_searcher()` 还带单例缓存。停止旧 8010 并重新启动后，活 MCP 验证已通过：
+
+```yaml
+requirements:
+  - image_tagging_vlm_mapper
+modality: image
+top_k: 1
+
+# 当前返回
+operators:
+  - name: image_tagging_vlm_mapper
+```
+
+因此，算子检索异常时必须区分三件事：
+
+1. 磁盘代码是否正确；
+2. 8010 活进程是否加载了该版本；
+3. DSH 的完整 MCP spill 中是否真的包含候选。
+
+不要用本地 import 结果直接推断 DSH 当时看到的结果，也不要看到 tool UI 截断就先断定候选在被截断部分。
+
+### 跨语言和响应膨胀问题
+
+当前 BM25 索引是英文算子名、英文说明和英文参数说明；tokenizer 只按空格、下划线和标点切分。长中文查询与英文索引没有 token 交集，简单加入中文分词也不能解决中英文词汇不相交的问题。
+
+当前临时规则应写进 Skill 和 MCP tool 参数说明：
+
+- `requirements` 是简短算子检索词，不是复述整段用户需求；
+- 先把需求转换成简短英文原子能力，例如 `image perceptual hash deduplication`、`image tagging using API vision language model`；
+- 三个依赖同一 VLM 结构化输出的业务判断，不必重复检索三个“完美 filter”，可检索一次 VLM tagging，再由任务 prompt 和后处理实现；
+- 选中候选后，query 必须准确等于算子名，不能写成 `image_tagging_vlm_mapper generate ...`，否则不触发 exact-name 分支。
+
+真实第二轮四需求、`top_k=10` 的完整响应约 83 KB，DSH UI 明确 spill 了 33 KB。讨论过强制两阶段“摘要 -> exact schema”，但用户最终选择更简单的成熟 Agent 方式：一次检索返回少量候选的完整 schema，exact-name 二次查询只作为失败兜底。
+
+现已实现：
+
+```text
+默认 top_k = 5
+服务端硬上限 = 5
+每个候选仍返回完整 parameters schema
+返回顶层有效 top_k，调用方传 10/30 也会明确显示 5
+query 精确等于算子名时仍直接返回准确算子
+```
+
+同一组四需求在活 8010 上重测，候选数量由最多 40 份 schema 降为最多 20 份，响应约 43,409 字符。下一步不是继续缩减每个候选的信息，而是让 DSH 把多个共享实现的业务判断归并成少量原子能力；例如“真实照片/动物类别/毛色”通常只需检索一次 API VLM tagging。
+
+同时应将中文零命中区分为 `search_miss` 或可重试检索失败，不要立即把跨语言零分误报成确定的能力 `gap`。
+
+### 算子参数显式化方案（已讨论，尚未实现）
+
+每个 VLM/LLM 算子的参数接口不同，不能因为都与 VLM 有关就统一参数名。例如：
+
+- `image_tagging_vlm_mapper` 有 `input_template`、`system_prompt`、`tag_field_name`、API/HF 切换；
+- `video_captioning_from_vlm_mapper` 有 `caption_num`、`keep_candidate_mode`、`keep_original_sample`，并可能扩增记录；
+- `text_tagging_by_prompt_mapper` 实际是文本 LLM 算子，当前偏 HF/vLLM，输出字段也不在 `__dj__meta__`。
+
+当前选择不维护完整 `operator_contract`。DSH 先精确获取选定算子的真实参数 schema，再由当前 LLM 根据任务和下游用途判断 material 参数。满足任一条件的参数必须显式写入 recipe 并在 Plan 审批中展示：
+
+- 影响任务 prompt、标签定义、分类边界或抽取要求；
+- 决定后续读取的输出字段和结构；
+- 决定模型、API/HF/vLLM 后端或兼容性；
+- 改变样本数量、候选保留或原样本保留；
+- 影响阈值、随机性、生成质量、成本或失败策略；
+- 算子默认值不能明确满足本任务；
+- 本次值与算子默认值不同。
+
+特别规则：生成结果若供下游分类、筛选或抽取，不得直接使用通用默认 prompt。例如基于标签筛选具体业务类别时，必须显式生成任务相关 prompt、标签规则和输出字段。
+
+未来可扩展 Plan 顶层（不进入 DJ recipe）：
+
+```yaml
+step_contracts:
+  - step_id: tag
+    implementation_ref: recipe.process[0]
+    consumes: [images]
+    expected_produces: [__dj__meta__.task_tags]
+    downstream_use: [filter]
+
+parameter_decisions:
+  - implementation_ref: recipe.process[0]
+    explicit:
+      input_template:
+        reason: downstream filtering requires task-specific labels
+      tag_field_name:
+        reason: postprocess reads a stable field
+```
+
+`prepare_plan` 至少可确定性校验参数名、必填项、显式决策是否确实写入 recipe、非默认值是否有理由；没有 operator contract 时，它不能完全证明 prompt 语义和实际输出字段，所以仍需要用户审批和小样本预检。不要把这段未来格式误认为当前已经支持。
+
+### `_stats.jsonl` 和最终资产方案（已讨论，尚未实现）
+
+当前 DJ exporter 的实际行为：
+
+- `keep_stats_in_res_ds=false` 会从主数据同时删除 `__dj__stats__` 和 `__dj__meta__`；
+- 独立 `_stats.jsonl` 默认只含 `__dj__stats__` 和 `__dj__meta__`；
+- `keep_hashes_in_res_ds` 是另一项控制；
+- `image_tagging_vlm_mapper` 的标签默认在 `__dj__meta__.image_tags`，因此 clean 主数据不会包含这些标签；
+- 有些业务输出在其他顶层字段，单纯删除 `__dj__meta__` 不是通用“清洁输出”。
+
+不建议把 Data-Juicer 全局 `keep_stats_in_res_ds` 默认改成 `true` 再无条件删除 meta，因为这会复制大量 stats、重写整个主数据，并且只删 meta 仍可能留下 stats、hash 或其他算子业务字段。
+
+当前偏好的轻量方案是不新增 `record_id` 字段，优先复用已有媒体路径作为 `_stats.jsonl` 关联字段：
+
+```yaml
+图像：images
+视频：videos
+音频：audios
+```
+
+边界必须记录：
+
+- 单媒体、一条路径唯一、同工作区内后处理时可直接使用路径；
+- 一条媒体对应多条文本/任务记录时，仅路径不唯一，应使用现有字段组成复合键，例如 `images + text`；
+- 多图列表需要路径规范化并保留稳定顺序；
+- caption/扩增算子会形成一对多，媒体路径只能表示来源，不能唯一标识输出行；
+- 绝对路径适合一次任务内部关联，不适合作为跨机器永久资产 ID。
+
+建议未来 Plan 增加输出策略，而不是只暴露一个布尔值：
+
+```yaml
+output_contract:
+  primary_asset: clean        # 或 full_stats / selected_stats
+  stats_sidecar: retain
+  join_fields: [images]
+  join_cardinality: one_to_one
+  selected_fields: []
+```
+
+DSH 不应把大型 stats 整体读进模型上下文；后处理脚本按关联字段程序化读取，DSH 只抽样审查。以上 exporter、Plan 和 runner 改动均尚未落地。
+
+## 11. 输入、校验和执行
+
+输入检查支持 JSON、JSONL、CSV、TSV、Parquet 的基本采样和字段判断。图片/视频目录会生成 DJ JSONL manifest，使用 `<__dj__image>` / `images` 或 `<__dj__video>` / `videos`。
+
+校验包括：
+
+- 只能有一个数据源；
+- 本地路径必须存在且位于工作区；
+- `process` 必须为非空的单算子步骤列表；
+- 算子必须存在，参数必须属于真实 schema，必填参数不能缺；
+- recipe 顶层字段必须属于 DJ 配置；
+- 明文 secret 被拒绝；
+- 后处理只支持工作区内现有 Python 脚本，并做语法检查和快照；
+- API 缺凭据时警告，API VLM 缺模型时错误。
+
+执行行为：
+
+- `run_plan` 异步启动独立 Python worker；
+- worker 继承 MCP 环境；
+- 执行前再次验证 bundle；
+- DJ 完成后顺序运行快照后的 Python 后处理；
+- stdout、stderr 和每个后处理分别留日志；
+- `get_run` 能识别 worker 异常退出；
+- `cancel_run` 终止 worker 和子进程；
+- 成功后生成基础 `report.md`。
+
+## 12. 启动、停止和重启
+
+当前正式入口：
+
+```text
+MCP:     http://127.0.0.1:8010/mcp
+DSH Web: http://127.0.0.1:57035/
+```
+
+启动 MCP 和 DSH Web：
+
+```powershell
+& D:\dsh-app\web-dj.ps1
+```
+
+`web-dj.ps1` 在 2026-08-25 已修改：
+
+- 默认 DSH Web 端口固定为 57035，不再每次随机开新端口；
+- 57035 已由相同 `bin.js web + dj-dsh.patch.yml` 实例监听时，直接复用并打开页面；
+- 57035 被其他程序占用时拒绝启动；
+- 发现其他端口的同类 DSH Web 时只告警，不自动终止，避免误杀仍在使用的会话；
+- 它新启动的 DSH 子进程放在 `try/finally` 中，脚本正常退出或多数 `Ctrl+C` 场景会清理；
+- 强制关闭整个 PowerShell 或系统异常时 `finally` 仍可能来不及执行，但下次启动会复用固定端口，不会继续随机累积；
+- 可显式传 `-Port 58000`，但正常使用不要随意改变固定端口。
+
+已验证 Windows PowerShell 5.1 AST 语法、57035 HTTP 200、复用前后 DSH Web 进程数不增加、非 DSH 进程占用目标端口时会正确拒绝。
+
+当前 57035/PID 37808 是修改启动器之前启动的进程；新脚本只是在复用它，尚未拥有其生命周期。下一次需要重启 DSH 时，应先确认并停止 PID 37808，再运行新脚本；从那次开始，脚本才能在退出时清理自己启动的 DSH。
+
+关闭浏览器标签页不等于停止 DSH Web。浏览器只是客户端，后台 Node Server 会继续监听。检查当前 DSH Web：
+
+```powershell
+Get-CimInstance Win32_Process |
+    Where-Object {
+        $_.Name -eq 'node.exe' -and
+        $_.CommandLine -match 'bin\.js web'
+    } |
+    Select-Object ProcessId, CreationDate, CommandLine
+```
+
+停止前先确认 8010 上确实是 plan-flow：
+
+```powershell
+$listener = Get-NetTCPConnection -LocalPort 8010 -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+
+if ($listener) {
+    $mcpProcess = Get-CimInstance Win32_Process `
+        -Filter "ProcessId=$($listener.OwningProcess)"
+
+    $mcpProcess | Select-Object ProcessId, CommandLine
+
+    if ($mcpProcess.CommandLine -match "data_juicer\.tools\.mcp_server.*plan-flow") {
+        Stop-Process -Id $mcpProcess.ProcessId
+    }
+}
+```
+
+修改 Python plan-flow 代码、`.env` 或 MCP 依赖后必须重启 MCP。修改 Skill 后应重启 DSH 或新建会话。不要在真实任务运行中重启。
+
+机器上仍可能存在历史 8000 plan-flow，它来自 `D:\dj\data-juicer-agents\.venv`，不是当前 DSH patch 指向的 8010。诊断时必须按监听端口和进程命令行确认目标，不能只看进程名。
+
+## 13. 已解决的故障
+
+### `ModuleNotFoundError: datasets`
+
+曾用 base Python 启动 DJ。当前启动器固定使用 `D:\dj\.envs\dsh-dj\python.exe`。
+
+### editable 安装要求 Microsoft Visual C++ 14+
+
+本地项目的构建依赖触发原生编译。不要在 base 环境反复 editable 安装整个项目；使用已经准备好的隔离环境。
+
+### stdio `Invalid JSON: EOF`
+
+手动启动 stdio MCP 后输入空行或关闭 stdin 会产生不完整 JSON-RPC。stdio 给客户端托管，不是交互式终端。正式 DSH 使用 streamable HTTP。
+
+### 把 JSON MCP 配置粘到 PowerShell
+
+`"mcpServers": {...}` 是配置文件内容，不是 PowerShell。当前使用 `dj-dsh.patch.yml`。
+
+### PowerShell 5.1 没有 `Start-Process -Environment`
+
+启动器已改成临时设置父进程环境、启动子进程继承，再恢复父进程。
+
+### `ArgumentList` 含 null
+
+启动器已过滤空的额外 DSH 参数。
+
+### 错误工作区
+
+旧实现把 MCP 源码目录当工作区。现改为每次传当前 DSH 工作区，cwd 不参与业务路径解析。
+
+### DSH 读取 `.env`
+
+旧 Skill 暴露具体文件路径，模型自行 Read。现已删除该提示，要求只看 MCP `runtime`，并禁止读取环境文件。
+
+### VLM 模型误判
+
+不能按名字是否含 `vl` 判断视觉能力。现由 MCP 返回服务器声明的模型角色并物化默认模型。
+
+### 精确算子名仍搜不到
+
+根因是 tag 过滤早于 BM25。现已加入媒体模态与 `multimodal` 兼容映射，以及精确算子名直接返回。
+
+### 单个 DSH 会话历史加载失败
+
+错误：
+
+```text
+history unavailable for session "session-3ab5d1c5-4775-4028-b0c2-850115a1723c"
+corrupt session log: seq gap in committed region at line 5 (expected 4, got 3)
+```
+
+对应文件：
+
+```text
+C:\Users\hu\.dsh\sessions\--D-shishi--\
+session-3ab5d1c5-4775-4028-b0c2-850115a1723c\session.jsonl.zstd
+```
+
+只读解压验证显示文件可解压、共 1867 行、末尾仍完整到 `seq=9802`；损坏位于开头：
+
+```text
+seq=0  permission/preset
+seq=1  sandbox/mode
+seq=2  approval/policy
+seq=3  session/end-seed
+seq=3  agent/inbox/spliced
+seq=4  turn/start
+...
+seq=9802 turn/end
+```
+
+时间线表明 session 创建后先写入 `session/end-seed seq=3`，数小时后实际对话又从 `seq=3` 开始。重启前内存状态仍可使用，重启后严格从磁盘校验才暴露错误。其他历史会话仍在，因为每个 session 是独立文件。
+
+同时曾发现 6 个 DSH Web 进程共享 `C:\Users\hu\.dsh\sessions`；多个旧页面/Server 共用日志增加了竞态和错误续写风险，但尚不能证明这是 DSH 内部 `end-seed` bug 的唯一原因。
+
+该 session 尚未修复。安全恢复方案：
+
+1. 停止所有 DSH Web；
+2. 备份原始 `.zstd`；
+3. 解压 JSONL；
+4. 只删除无数据的 `session/end-seed seq=3`；
+5. 保留实际首轮的 `agent/inbox/spliced seq=3`；
+6. 重新压缩并加载；
+7. 不要把第二个 3 改成 4，否则后面全部序号和缓存终点都会错位。
+
+目前没有发现 DSH 自带 session repair 命令。恢复前必须保留原文件，且不要在 DSH 仍运行时编辑会话日志。
+
+## 14. 验证状态
+
+测试文件：
+
+```text
+D:\dj\data-juicer-1.5.4\tests\tools\plan_flow\test_plan_flow.py
+```
+
+已验证：
+
+- 动态工作区相对路径解析；
+- runtime 不泄漏 secret；
+- API VLM 自动物化默认模型；
+- 精确算子名置顶和媒体/multimodal 兼容检索；
+- Plan 版本不可变和 diff；
+- 无效 Plan 不能批准；
+- 未批准不能运行，篡改可检测；
+- 后处理快照且不进入 recipe；
+- MCP 只暴露九工具；
+- 完整批准、DJ 执行和报告链路。
+
+最近结果：10 个快速测试通过；1 个完整执行测试单独通过。
+
+2026-08-25 追加的活环境验证：
+
+- 直接通过 MCP Client 调用 `http://127.0.0.1:8010/mcp`；
+- 精确查询 `image_tagging_vlm_mapper`、`modality=image`、`top_k=1`，返回列表只有该算子；
+- runtime 返回 API credential/base URL/VLM model 均已配置，默认模型为 `qwen3.7-plus`；
+- 当前 DSH Web 57035 返回 HTTP 200；
+- 修改后的 `web-dj.ps1` 在 Windows PowerShell 5.1 下解析通过；
+- 复用 57035 前后 DSH Web 进程数均为 1；
+- 用 8010 作为错误的 Web 端口测试时，启动器正确识别其拥有者不是预期 DSH Web 并退出非零。
+
+尚缺的回归测试：
+
+- 一次完整 schema 检索的响应体预算和需求归并效果；
+- exact-name 兜底和服务端 `top_k=5` 硬上限；
+- 中文/跨语言零命中不能直接误报确定能力 gap；
+- material 参数与下游依赖校验；
+- stats sidecar 关联字段、一对多和复合键；
+- DSH session 日志 `end-seed` 重复的上游修复或最小复现。
+
+已知非阻塞警告：Pydantic Settings 的 `IncompleteFieldDefinitionWarning`，以及 DJ 某些字符串的 `SyntaxWarning: invalid escape sequence`。
+
+## 15. 当前进度和未提交状态
+
+Plan-First MCP 主体已实现，不再处于“讨论方案 B”阶段。工作区、Plan 版本、审批 hash、异步运行、API/VLM 注入、双 UI 确认和算子检索修复均已落地。
+
+旧 8010 已停止并重启，精确 VLM 算子检索在活 MCP 上验证通过；旧的多个 DSH Web 也已清理到只剩 57035。因此原文“先重启 8010”的下一动作已经完成。
+
+当前阶段是“稳定接口并完成真实验收”，不是继续搭架构。最先要处理的是：
+
+1. 对损坏 session 做备份恢复，或者明确放弃该 session 并新建干净会话；
+2. 更新 Skill/tool 描述：使用简短英文原子能力词、归并共享同一实现的业务判断、默认不主动请求超过 5 个候选；exact-name 只作为召回失败兜底；
+3. 再跑真实小样本任务，观察 DSH 是否能在一次完整 schema 检索中选中 API `image_tagging_vlm_mapper`、生成任务相关 prompt 并合理分配 DJ/后处理；
+5. 根据真实失败决定是否实现 material 参数和 stats 输出方案，不要一次引入尚未证明必要的大型 contract 层。
+
+本文更新时两个仓库都有未提交改动。重要项包括：
+
+```text
+D:\dj\data-juicer-1.5.4
+  data_juicer/tools/plan_flow/discovery.py
+  data_juicer/tools/plan_flow/validation.py
+  skills/data-juicer-plan-flow/SKILL.md
+  tests/tools/plan_flow/test_plan_flow.py
+
+D:\dsh-app
+  .dsh/skills/data-juicer-plan-flow-zh/SKILL.md
+  .dsh/skills/data-juicer-plan-flow/SKILL.md
+  web-dj.ps1
+  DJ_DSH_HANDOFF.zh-CN.md
+  DJ_DSH_HANDOFF.md（同步后）
+```
+
+`D:\dj\data-juicer-1.5.4` 还有多项 demos 文件修改和未跟踪 `data-juicer-hub/`，不属于本轮 plan-flow 核心改动，不能顺手覆盖或清理。`D:\dsh-app` 还有未跟踪 `docs/`。这些均按用户已有工作处理。
+
+接手后仍要在两个仓库分别运行 `git status --short`，不要把上面列表当永久事实。
+
+## 16. 下一步计划
+
+1. 在所有 DSH Web 停止的前提下，备份并修复损坏 session 的重复 `session/end-seed seq=3`；若暂不修复，至少不要继续让多个 Server 打开它；
+2. 更新 Skill 和 MCP tool description：使用简短英文原子能力词、归并共享同一实现的业务判断、默认不主动请求超过 5 个候选；exact-name 只作为召回失败兜底；跨语言零命中先标记 search miss，不立即判定 gap；
+3. 用小规模真实任务验证需求摘要弹窗、一次有界完整 schema 检索、Plan 保存、Plan 审批、执行和报告；
+4. 确认 DSH 对具体筛选/分类任务显式生成任务 prompt、输出字段、模型/后端和会改变基数的参数，不依赖通用默认 prompt；
+5. 确认 DSH 不读取 `.env`、不猜测或替换 VLM，Plan 写入当前会话工作区而不是 DJ 源码目录；
+6. 验证 `plan_v001 -> plan_v002` 修改、diff 和重新审批，以及失败日志、自修复边界和新版本生成；
+7. 基于真实任务决定 stats 第一版：优先让 `_stats.jsonl` 带 `images/videos/audios` 关联字段，并验证复合键/一对多边界；不要先全局改 `keep_stats_in_res_ds=true`；
+8. 若真实任务仍反复漏关键参数，再实现 `step_contracts`、`parameter_decisions` 和有限的 `prepare_plan` material 校验；暂不引入全量 operator contract；
+9. 增强报告：输入/输出记录数、过滤比例、关键统计、关联 sidecar 和验收标准逐项结果；
+10. 决定是否实现 DSH 侧硬审批桥接；
+11. 验收后审查两个仓库 diff，只提交本项目相关文件；后续再考虑 MCP Roots、模型能力动态探测、更多输入格式和通用 session 恢复策略。
+
+## 17. 不要重复踩的坑
+
+1. 不要把历史测试工作区写进代码、Skill、启动器或提示词。
+2. 不要把 MCP 源码目录或 cwd 当业务工作区。
+3. 不要使用全局可变 `set_workspace` 服务多个 HTTP 会话。
+4. 不要让算子、DSH 或脚本自行读取 `.env`。
+5. 不要把 API key 放进 Plan、recipe、工具参数、日志、报告或文档。
+6. runtime 缺字段通常表示旧 MCP 未重启，不要读取配置文件兜底。
+7. 不要按模型名字符串猜能力或擅自换模型。
+8. 不要把 `content_hash` 当真人审批证明；它只绑定内容完整性。
+9. 不要把普通“好”“继续”当 Plan 审批，必须使用准确 UI 选项。
+10. 不要覆盖旧 Plan；实质修改必须创建新版本。
+11. 不要把后处理写进 DJ recipe。
+12. 不要无限找算子；聚焦检索后明确 gap。
+13. exact query 没结果时先检查 tag 过滤，不要断言算子不存在。
+14. 不要在 PowerShell 里交互使用 stdio MCP。
+15. 不要把 JSON/YAML 配置当 PowerShell 命令。
+16. 不要用 base Python 启动 DJ；确认解释器和 import 路径。
+17. 8010 有旧 MCP 时不要误以为 `.env` 或新代码已加载。
+18. 不要在真实运行中重启 MCP/DSH。
+19. 不要用破坏性 Git 命令或覆盖用户修改的中文 Skill。
+20. 不要把某个演示任务硬编码为通用行为。
+21. 不要把本地当前源码的搜索结果当作 DSH 活 MCP 的历史结果；先读完整 spill，必要时直接调用 8010。
+22. 不要只重启浏览器或 DSH 就以为 Python MCP 加载了新代码；Python 文件、`.env` 或依赖变更都必须停止并重启 8010。
+23. 不要只看 tool UI 的截断提示就认定候选在 spill 后半段；对关键故障应 grep 完整 spill。
+24. 不要用长中文业务需求直接查询英文 BM25 索引，也不要认为加中文分词就自动解决跨语言语义映射。
+25. 不要把自然语言 query 与精确算子名混在同一个字符串；`image_tagging_vlm_mapper generate ...` 不是 exact query。
+26. 不要无上限返回候选完整 schema；当前服务端硬限制每项最多 5 个，DSH 还应归并重复需求。
+27. 不要因为同属 VLM 就向不同算子注入同一组参数；必须读取选定算子的真实 schema。
+28. 下游要用生成标签筛选时，不要采用通用默认 prompt；prompt、标签定义和输出字段是 material 参数。
+29. 不要把 `keep_stats_in_res_ds=true` 当作所有输出问题的默认答案；它会同时保留 stats/meta，并可能造成主数据与 sidecar 重复。
+30. 不要按 `_stats.jsonl` 行号关联主数据；过滤、重排、分片和扩增都会破坏行号对应。优先用现有媒体路径或复合字段，并声明一对一/一对多。
+31. 关闭浏览器标签页不会停止 DSH Web；检查后台 `node.exe ... bin.js web` 和监听端口。
+32. 不要同时保留多个 DSH Web 共用 `C:\Users\hu\.dsh\sessions`；旧页面可能继续持有连接或写会话。
+33. session 序号损坏时不要直接给后续所有事件加一，也不要删除整个 session；先备份，找出重复/缺失的准确事件。
+34. 当前固定入口是 57035 + 8010；8000 是历史进程，不是当前 DSH patch 的 MCP。
+
+## 18. 建议接手提示词
+
+```text
+先阅读 D:\dsh-app\DJ_DSH_HANDOFF.zh-CN.md，并分别检查 D:\dsh-app 与
+D:\dj\data-juicer-1.5.4 的 git status。保留用户对中文版 Skill 的修改。
+当前 plan-flow 已实现，8010 精确 VLM 检索、top_k=5 有界完整 schema 返回和 57035
+单实例 DSH 已验证。先处理损坏 session，再用新会话做小规模端到端验收。
+不要重新设计 DJAgent 架构，不要读取 dj-plan-flow.env，也不要写死工作区。
+不要把尚未实现的 stats/material-parameter 讨论当作已经落地。
 ```

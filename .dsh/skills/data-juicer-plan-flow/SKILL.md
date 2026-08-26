@@ -13,14 +13,15 @@ The MCP server has no independent business workspace. Its source directory and p
 
 ## Workflow
 
-1. Determine whether the request identifies the input, desired outputs, material constraints, and acceptance criteria. Ask concise questions only for missing choices that would change the pipeline. Do not prepare a plan while such choices remain unresolved.
-2. Call `mcp__dj__inspect_input` for local input. Search independent requirements with `mcp__dj__search_capabilities`; independent searches may run in parallel. Read its `runtime` booleans to learn whether API credentials, base URL, and VLM model are already configured without exposing their values.
-3. Put supported Data-Juicer steps in `plan.recipe.process`. If a focused search finds no suitable operator, propose a generic Python artifact in top-level `plan.postprocess`; do not search indefinitely. Never place postprocess configuration inside `recipe`.
-4. Call `mcp__dj__prepare_plan`. For a revision, reuse its `task_id` and pass the prior `plan_version` as `base_plan_version`. Every call creates a new immutable `plan_vNNN`; never edit an existing plan bundle.
-5. Present the normalized recipe, important parameters, postprocess steps, risks, validation findings, version diff, and `content_hash`. Wait for explicit approval of that exact plan. Do not approve on the user's behalf or treat a generic acknowledgement as approval.
-6. After approval, call `mcp__dj__approve_plan` with the exact `task_id`, `plan_version`, and `content_hash`, then call `mcp__dj__run_plan`.
-7. Poll `mcp__dj__get_run`. On failure, inspect its logs first. Retry unchanged transient failures only when safe. If recipe, artifacts, paths, or semantics must change, prepare a new version and obtain approval again. Use `mcp__dj__cancel_run` only when requested or continuing is unsafe.
-8. On success, return the task id, plan version, run id, output directory, materialized recipe, and report path.
+1. Determine whether the request identifies the input, desired outputs, material constraints, and acceptance criteria. If a missing choice would materially change the pipeline, use `ask_user_question` to resolve it; do not substitute an assumption or a plain-text question.
+2. Before inspecting data or planning, summarize the understood requirements as a concise brief covering input, outputs, transformations, constraints, and acceptance criteria. Always call `ask_user_question` with the choices `Confirm and plan`, `Revise requirements`, and `Cancel`. Continue only when the returned answer is exactly `Confirm and plan`; the original request itself is not confirmation.
+3. Call `mcp__dj__inspect_input` for local input. Search independent requirements with `mcp__dj__search_capabilities`; independent searches may run in parallel. Use only its `runtime` object to learn server configuration. Never read or inspect an environment file through DSH tools.
+4. Put supported Data-Juicer steps in `plan.recipe.process`. If a focused search finds no suitable operator, propose a generic Python artifact in top-level `plan.postprocess`; do not search indefinitely. Never place postprocess configuration inside `recipe`.
+5. Call `mcp__dj__prepare_plan`. For a revision, reuse its `task_id` and pass the prior `plan_version` as `base_plan_version`. Every call creates a new immutable `plan_vNNN`; never edit an existing plan bundle.
+6. Present the normalized recipe, important parameters, postprocess steps, risks, validation findings, version diff, and `content_hash`. Then always call `ask_user_question` with `Approve and run`, `Revise plan`, and `Cancel`. Call `mcp__dj__approve_plan` only when the returned answer is exactly `Approve and run`; a chat acknowledgement is not approval. A revised plan requires a new review question.
+7. After approval, call `mcp__dj__approve_plan` with the exact `task_id`, `plan_version`, and `content_hash`, then call `mcp__dj__run_plan`.
+8. Poll `mcp__dj__get_run`. On failure, inspect its logs first. Retry unchanged transient failures only when safe. If recipe, artifacts, paths, or semantics must change, prepare a new version and obtain approval again. Use `mcp__dj__cancel_run` only when requested or continuing is unsafe.
+9. On success, return the task id, plan version, run id, output directory, materialized recipe, and report path.
 
 `mcp__dj__preview_plan` is a non-executing preflight summary. It does not replace validation or approval.
 
@@ -45,7 +46,7 @@ postprocess: []
 
 Use only real operator names and parameters returned by capability discovery. Scripts must exist inside the workspace before `prepare_plan`; the MCP snapshots them into the immutable bundle. Never put plaintext secrets in a plan, recipe, script arguments, report, or tool call.
 
-For API operators, omit `api_key` and `base_url` from the plan. Data-Juicer inherits `OPENAI_*`, `DASHSCOPE_*`, or `SK` from the MCP server environment. If `runtime.api_credentials_configured` is false, tell the user to update `D:\dsh-app\dj-plan-flow.env` and restart the MCP launcher; do not attempt to set or copy the secret through DSH tools.
+For API operators, omit `api_key` and `base_url` from the plan. Data-Juicer inherits credentials and endpoints from the MCP server environment. For an API-backed VLM operator, set `is_api_model: true` and normally omit `api_or_hf_model`; `prepare_plan` materializes the server default reported by `runtime.default_models.vlm`. Treat that declared role as authoritative: never infer modality from substrings such as `vl`, never replace the configured model on your own, and never read an environment file. An explicit user-selected model may override the default and must be shown as a material plan parameter. If required runtime configuration is absent, report the missing capability and ask the user to reconfigure and restart the MCP server without inspecting secret files.
 
 ## Tool Surface
 
