@@ -3,8 +3,6 @@
   config:
     customSkillDirs:
       - D:\dsh-app\.dsh\skills
-- id: tool-skill
-  disabled: false
 - id: tool-pwsh
   disabled: false
 - id: tool-fs
