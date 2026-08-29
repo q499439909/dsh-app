@@ -1,10 +1,10 @@
-# Windows 本机 Docker Worker：阶段 A–F 接手记录
+# Windows 本机 Docker Worker：阶段 A–G 接手记录
 
 更新时间：2026-08-30
 
 ## 1. 文档用途
 
-本文是阶段 A–F 完成后的事实型接手文档，回答三个问题：
+本文是阶段 A–G 完成后的事实型接手文档，回答三个问题：
 
 1. 当前已经完成并实际验证了什么；
 2. 实施过程中哪些地方不能靠猜；
@@ -16,7 +16,7 @@
 
 ## 2. 当前结论
 
-阶段 A、B、C、D、E、F 的本机验证范围已经完成，可以进入阶段 G。
+阶段 A、B、C、D、E、F、G 的本机验证范围已经完成，可以进入阶段 H。
 
 当前已经具备：
 
@@ -31,8 +31,11 @@
 - 使用安全 argv 调用 Docker、固定安全参数和受控 staging 的 `DockerBackend`；
 - Docker 私有状态、deadline/cancel/OOM/丢失映射、结果完整性复核、运行 provenance 和差异化 cleanup；
 - 真实 Docker Desktop 端到端执行、Adapter 重建后恢复和容器清理验证。
+- 严格 ModelManifest、受控 staging、原子发布、逐文件与聚合 hash 复核的本机 ModelStore；
+- `model-store://` 逻辑 URI、Docker 只读模型挂载和模型 provenance；
+- 两个真实容器并发读同一模型、容器内修改失败、容器删除后模型仍存在的验证。
 
-尚未实现的是阶段 G 的 ModelStore、阶段 H 自定义算子闭环和后续 broker/API。阶段 F Adapter 当前仅接收本地 dataset、默认 executor、无 postprocess、无自定义算子和无模型的受控范围；超出范围会显式拒绝，不会静默降级。
+尚未实现的是阶段 H 自定义算子闭环和后续 broker/API。Docker Adapter 当前支持本地 dataset、默认 executor 和已发布本机模型；postprocess、自定义算子和非默认 executor 仍会显式拒绝，不会静默降级。
 
 ## 3. 接手时的代码和制品位置
 
@@ -42,7 +45,7 @@
 规划与接手文档：D:\dsh-app
 Data-Juicer 源码：D:\dj\data-juicer-1.5.4
 受控 worker 根：D:\dsh-worker
-当前检查 commit：065b5b22fb612a70111b710da94b1de8a86cebcb
+当前检查 commit：d56e53d22e9bc87d692002539c017d9d3946ae07
 ```
 
 Data-Juicer 工作树当前是 dirty worktree，里面同时存在用户先前修改和 A–F 修改。不要使用 `git reset --hard`、`git checkout --` 或按整个工作树回退。接手者只能按文件和 diff 分辨自己的修改。
@@ -74,6 +77,9 @@ D:\dsh-worker\build-results\dj-plan-flow-execution-backend-local-v1\
 
 D:\dsh-worker\build-results\dj-plan-flow-docker-backend-local-v1\
   validation-summary.json
+
+D:\dsh-worker\build-results\dj-plan-flow-model-store-local-v1\
+  validation-summary.json
 ```
 
 最终成功 fixture：
@@ -94,6 +100,13 @@ D:\dsh-worker\runs\run-d004
 D:\dsh-worker\runs\run-f-5130509f57c942a7891985bdeb13dda1
 ```
 
+阶段 G 已发布模型与最终 Docker fixture：
+
+```text
+D:\dsh-worker\models\fixture-tiny-model-v1
+D:\dsh-worker\runs\run-docker-71c062b515be41f59b42047e51792b57
+```
+
 ## 4. 阶段完成情况
 
 | 阶段 | 状态 | 已验证事实 | 尚未声称完成的内容 |
@@ -104,6 +117,7 @@ D:\dsh-worker\runs\run-f-5130509f57c942a7891985bdeb13dda1
 | D | 完成 | 严格 `run-spec`；容器路径物化；recipe hash；模型声明和只读挂载；输入/bundle 只读、output/work/tmp 可写；DJ 默认执行器；result manifest；稳定退出码；成功和失败 fixture | timeout/cancel、100 条记录、自定义算子、tiny model；这些继续按原规划逐步验证 |
 | E | 完成 | 通用 execution interface；不透明 `backend_ref`；LocalProcess Adapter；PID 私有状态；PlanRunner 依赖注入；inspect/cancel/collect/cleanup；重启后恢复；`RUNNER_LOST`；contract tests | Docker Adapter 和容器生命周期属于阶段 F |
 | F | 完成当前阶段范围 | Docker Adapter；镜像 tag 启动前解析为 image ID；安全 argv；固定 sandbox/resource 参数；受控 input/bundle/output/work；私有容器状态；restart recovery；deadline/cancel/OOM/exit/missing 映射；日志与结果收集；provenance；成功/失败 cleanup；真实 Docker 端到端 | broker orphan 对账、ModelStore、自定义算子、postprocess 和非默认 executor 按后续阶段实现 |
+| G | 完成当前阶段范围 | Installer/Publisher 路径角色分离；严格 ModelManifest；逐文件和确定性 tree hash；许可状态；失败不暴露部分 artifact；同卷原子 rename；每次 resolve 复核；逻辑 URI；Docker 只读挂载；并发读取；修改拒绝；模型 provenance | OS 独立服务账号/ACL 属于部署加固；联网 downloader、公开模型、TTL/LRU/引用保护不在本阶段 tiny fixture 范围 |
 
 ### 4.1 阶段 A 的当前主机事实
 
@@ -327,6 +341,40 @@ Data-Juicer 会打印很大的配置表和进度日志，并带有当前仓库�
 
 阶段 F 最终 `pip check` 通过，且 site-packages 没有本阶段测试时刻的新安装痕迹。当前规范化 freeze hash 是 `d1bfc3a4c4643576dbffdccf85723fba2cf84c800c05c9010f6a3551443477d7`，但它不能与阶段 E 的 `4c032...` 直接解释为“阶段 F 安装了包”：两次检查之间仓库 HEAD 和 editable VCS identity 已变化，且阶段 F 开始前没有重新记录同算法的 before 值。后续阶段必须在第一项可能导入项目代码的测试之前先取 before hash；没有 before 值时只能报告当前事实，不能猜差异来源。
 
+### 5.15 不要用“目录已经复制完成”代替模型发布
+
+正式 artifact 必须先在 `model-downloads/<request-id>` 完整落盘，再由 ModelStore 校验 manifest 字段、许可状态、文件清单、逐文件 hash、总大小和聚合 tree hash。Publisher 只把 manifest 声明的文件复制到：
+
+```text
+models/.publishing-<artifact-id>-<uuid>
+```
+
+复核副本后才在同一 `models` 文件系统内原子 rename。直接 copy 到 `models/<artifact-id>` 会让并发 run 看见半成品，不能采用。
+
+### 5.16 聚合 hash 算法不能靠口头约定
+
+阶段 G 将 artifact 聚合 hash 明确定义为：按规范化相对路径排序，对每个文件依次输入 `UTF-8(path) + NUL + file bytes + NUL` 后计算 SHA-256。最初手工 fixture 曾因命令行转义把预期聚合 hash 算错，Publisher 正确拒绝且正式模型目录没有出现。最终 manifest 中的聚合 hash是：
+
+```text
+sha256:46150d027b041df4093eb3c50ad740480005d0960218d35b28f37cc968eb87ce
+```
+
+这再次说明 hash 必须由与 Publisher 相同的实现对最终字节计算，不能从看起来等价的 shell 表达式猜。
+
+### 5.17 模型正式目录存在不等于之后永远可信
+
+同一 Windows 用户仍可在容器外改动文件，因此 `resolve()` 每次都重新验证完整 artifact，而不是只在 publish 时验证一次。run 侧的安全保证来自 Docker bind mount 的 `readonly`，不是宿主文件的只读属性。未来使用独立服务账号/ACL 可以继续加固，但当前文档不把模块接口的路径授权误写成 OS 级不可绕过隔离。
+
+### 5.18 不要把宿主模型路径写进 Plan
+
+Plan 只声明 artifact identity，并以：
+
+```text
+model-store://fixture-tiny-model-v1/weights.bin
+```
+
+引用文件。Docker Adapter 在确认 artifact 已发布且文件属于 manifest 后才物化成 `/models/<artifact-id>/<file>`。宿主 `D:\dsh-worker\models\...` 路径只出现在 ModelStore 和 Docker 私有状态，不能进入通用 handle 或可移植 Plan。
+
 ## 6. 阶段 E 已实施的设计决定：通用 RunHandle 不暴露 Docker 字段
 
 ### 6.1 决定
@@ -482,4 +530,76 @@ output + work writable
 - Docker Desktop 29.7.2，真实运行固定 image ID `sha256:c8815bf653a3e4fe7946ce1bf1c5501a37949b44401dfe06914c77a30db76490`；
 - 没有遗留 managed container。
 
-阶段 F 没有实现模型、自定义算子或 postprocess。Adapter 对这些输入显式返回 unsupported 错误，这是当前安全边界，不是遗漏执行。下一步可按原规划进入阶段 G；后续内容与规划一致的部分不在本文重复。
+阶段 F 收口时尚未实现模型、自定义算子或 postprocess；其中模型能力现已由下方阶段 G 补齐。自定义算子和 postprocess 仍保持显式 unsupported，不会静默跳过。
+
+## 9. 阶段 G 实施结果
+
+实现位置：
+
+```text
+data_juicer/tools/plan_flow/model_store.py
+data_juicer/tools/plan_flow/validation.py
+data_juicer/tools/plan_flow/execution/docker.py
+tests/tools/plan_flow/test_model_store.py
+tests/tools/plan_flow/test_docker_backend.py
+```
+
+### 9.1 ModelStore seam
+
+阶段 G 使用两个窄模块表达不同角色：
+
+```text
+LocalModelInstaller.stage_local(request_id, source_dir)
+  只接受 D:\dsh-worker\fixtures 下的源
+  只写 D:\dsh-worker\model-downloads\<request-id>
+
+LocalModelStore.publish(request_id)
+LocalModelStore.resolve(artifact_id)
+LocalModelStore.verify(artifact_id)
+  只从 model-downloads 发布到 models
+  resolve/verify 均重新执行完整性检查
+```
+
+这是当前单机进程内的路径能力分离，不等同于两个 Windows 服务账号。真实 run input 位于 workspace，Installer interface 会拒绝将其作为源；后续 broker/部署若需要抵抗同主机恶意代码，应再使用独立 principal 和 ACL。
+
+### 9.2 Manifest 与发布状态
+
+当前 manifest 为严格 schema，只接受 artifact/source/revision/hash/size/license/files；许可状态必须是 `approved` 或 `approved-for-test`。路径拒绝绝对路径、`..`、Windows ADS 冒号、反斜杠、大小写重复和 symlink。
+
+已验证两类持久状态：
+
+```text
+model-downloads/<request-id>/_stage.json       status=staged
+models/<artifact-id>/_publication.json         status=published
+```
+
+受控 hash mismatch fixture 在 staging 校验时失败，`models/<artifact-id>` 不存在，也没有遗留 `.publishing-*`。
+
+### 9.3 Docker 接入
+
+Plan 顶层使用：
+
+```yaml
+models:
+  - artifact_id: fixture-tiny-model-v1
+```
+
+recipe 内的 `model-store://` URI 由 Adapter 解析。未声明 artifact、未列入 manifest 的文件、缺少 ModelStore、worker root 不一致都会在 `docker create` 前失败。通过后新增只读 bind mount，并将同一 artifact identity 写入 `run-spec.models`。最终 provenance 记录 artifact ID、source、revision、aggregate hash、size 和 license status，不记录宿主路径。
+
+### 9.4 真实验收
+
+最终 tiny fixture：
+
+```text
+artifact_id: fixture-tiny-model-v1
+payload: weights.bin, 1076 bytes
+file sha256: e3c0d1f24e4bc584015d8c0776330d57b19b0a06963c9f7946ceb894a64e6250
+tree sha256: 46150d027b041df4093eb3c50ad740480005d0960218d35b28f37cc968eb87ce
+license: approved-for-test
+```
+
+真实 Docker 验证包括：两个容器同时处于 running 并读取同一文件；容器内 `unlink` 返回只读文件系统错误；两个容器删除后 `LocalModelStore.verify()` 继续通过；另一次完整 `DockerBackend` run 成功，container entry 验证模型挂载只读，provenance 包含准确模型 manifest，cleanup 删除容器但不删除模型。
+
+最终选定回归为 45 passed，包含三个显式 Docker integration；Ruff、Python compile、`git diff --check`、`pip check` 通过。最终回归前后规范化 freeze hash 均为 `b1576420911e2c336d677b4851c82f5439d54a5e3a8cd0181f77edebaf2f3a05`，基础镜像 ID 前后均为 `sha256:c8815bf653a3e4fe7946ce1bf1c5501a37949b44401dfe06914c77a30db76490`，没有遗留 managed/model-test 容器。
+
+下一步可按原规划进入阶段 H。阶段 H 的 capability proposal、派生镜像和自定义算子内容与规划一致，此处不重复。
