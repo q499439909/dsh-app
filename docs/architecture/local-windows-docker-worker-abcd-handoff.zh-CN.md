@@ -1,22 +1,22 @@
-# Windows 本机 Docker Worker：阶段 A–E 接手记录
+# Windows 本机 Docker Worker：阶段 A–F 接手记录
 
-更新时间：2026-08-29
+更新时间：2026-08-30
 
 ## 1. 文档用途
 
-本文是阶段 A–E 完成后的事实型接手文档，回答三个问题：
+本文是阶段 A–F 完成后的事实型接手文档，回答三个问题：
 
 1. 当前已经完成并实际验证了什么；
 2. 实施过程中哪些地方不能靠猜；
-3. 阶段 E 开始前需要修正原规划中的哪一项设计。
+3. 原规划中哪些设计已被实施事实修正或收窄。
 
 后续总体路线仍以
 [`local-windows-docker-worker-validation.zh-CN.md`](./local-windows-docker-worker-validation.zh-CN.md)
-为准。本文不重复与原规划一致的 E 以后内容；只有本文明确标为“替代原规划”的决定优先。
+为准。本文不重复与原规划一致的后续内容；只有本文明确标为“替代原规划”的决定优先。
 
 ## 2. 当前结论
 
-阶段 A、B、C、D、E 的本机验证范围已经完成，可以进入阶段 F。
+阶段 A、B、C、D、E、F 的本机验证范围已经完成，可以进入阶段 G。
 
 当前已经具备：
 
@@ -28,8 +28,11 @@
 - 结构化失败码、输出清单和可复核的文件 hash。
 - 通用 `ExecutionBackend` seam 和不泄漏 PID/Docker 字段的 `RunHandle`；
 - 已从 `PlanRunner` 移出的 `LocalProcessBackend` 进程生命周期实现。
+- 使用安全 argv 调用 Docker、固定安全参数和受控 staging 的 `DockerBackend`；
+- Docker 私有状态、deadline/cancel/OOM/丢失映射、结果完整性复核、运行 provenance 和差异化 cleanup；
+- 真实 Docker Desktop 端到端执行、Adapter 重建后恢复和容器清理验证。
 
-尚未实现的是阶段 F 的 Docker Adapter、Docker 生命周期管理和 broker。当前成功的容器运行仍由人工等价命令完成，不应误写成“DockerBackend 已完成”。
+尚未实现的是阶段 G 的 ModelStore、阶段 H 自定义算子闭环和后续 broker/API。阶段 F Adapter 当前仅接收本地 dataset、默认 executor、无 postprocess、无自定义算子和无模型的受控范围；超出范围会显式拒绝，不会静默降级。
 
 ## 3. 接手时的代码和制品位置
 
@@ -39,10 +42,10 @@
 规划与接手文档：D:\dsh-app
 Data-Juicer 源码：D:\dj\data-juicer-1.5.4
 受控 worker 根：D:\dsh-worker
-源码基准 commit：3267db5de297664db4fa4e505e93a1d58d74c95f
+当前检查 commit：065b5b22fb612a70111b710da94b1de8a86cebcb
 ```
 
-Data-Juicer 工作树当前是 dirty worktree，里面同时存在用户先前修改和 A–D 修改。不要使用 `git reset --hard`、`git checkout --` 或按整个工作树回退。接手者只能按文件和 diff 分辨自己的修改。
+Data-Juicer 工作树当前是 dirty worktree，里面同时存在用户先前修改和 A–F 修改。不要使用 `git reset --hard`、`git checkout --` 或按整个工作树回退。接手者只能按文件和 diff 分辨自己的修改。
 
 ### 3.2 当前镜像
 
@@ -68,6 +71,9 @@ D:\dsh-worker\build-results\dj-plan-flow-container-entry-local-v1\
 
 D:\dsh-worker\build-results\dj-plan-flow-execution-backend-local-v1\
   validation-summary.json
+
+D:\dsh-worker\build-results\dj-plan-flow-docker-backend-local-v1\
+  validation-summary.json
 ```
 
 最终成功 fixture：
@@ -82,6 +88,12 @@ D:\dsh-worker\runs\run-d005
 D:\dsh-worker\runs\run-d004
 ```
 
+阶段 F 最终真实 Adapter fixture（已删除容器和成功运行的 `work`，保留 bundle/input/output/logs/provenance）：
+
+```text
+D:\dsh-worker\runs\run-f-5130509f57c942a7891985bdeb13dda1
+```
+
 ## 4. 阶段完成情况
 
 | 阶段 | 状态 | 已验证事实 | 尚未声称完成的内容 |
@@ -91,6 +103,7 @@ D:\dsh-worker\runs\run-d004
 | C | 完成 | 固定基础镜像 digest；`uv==0.12.5`；`uv sync --frozen`；core + tools；非 editable 安装；非 root；只读 rootfs、断网、drop capabilities、no-new-privileges 和 tmpfs smoke test 通过 | GPU/CUDA、通用视觉/音频依赖、生产镜像发布与 registry |
 | D | 完成 | 严格 `run-spec`；容器路径物化；recipe hash；模型声明和只读挂载；输入/bundle 只读、output/work/tmp 可写；DJ 默认执行器；result manifest；稳定退出码；成功和失败 fixture | timeout/cancel、100 条记录、自定义算子、tiny model；这些继续按原规划逐步验证 |
 | E | 完成 | 通用 execution interface；不透明 `backend_ref`；LocalProcess Adapter；PID 私有状态；PlanRunner 依赖注入；inspect/cancel/collect/cleanup；重启后恢复；`RUNNER_LOST`；contract tests | Docker Adapter 和容器生命周期属于阶段 F |
+| F | 完成当前阶段范围 | Docker Adapter；镜像 tag 启动前解析为 image ID；安全 argv；固定 sandbox/resource 参数；受控 input/bundle/output/work；私有容器状态；restart recovery；deadline/cancel/OOM/exit/missing 映射；日志与结果收集；provenance；成功/失败 cleanup；真实 Docker 端到端 | broker orphan 对账、ModelStore、自定义算子、postprocess 和非默认 executor 按后续阶段实现 |
 
 ### 4.1 阶段 A 的当前主机事实
 
@@ -286,6 +299,34 @@ Data-Juicer 会打印很大的配置表和进度日志，并带有当前仓库�
 
 日志用于诊断，不应替代结构化状态和清单。
 
+### 5.11 不要让 Docker tag、container name 或调用方 handle 成为控制真相
+
+阶段 F 启动时先用 `docker image inspect` 将 tag 解析成 `sha256:` image ID，再以该 ID 创建容器。容器 ID、image ID、名称和受控运行根只写入：
+
+```text
+<workspace>/.dj/execution/docker/<backend_ref>.json
+```
+
+`RunHandle` 仍只有通用字段。Adapter 重建后靠私有记录恢复；handle 的 `created_at/deadline` 还必须与私有 `RuntimeSpec` 一致，不能让伪造 handle 提前取消真实容器。
+
+### 5.12 不要把“argv 安全”误解成“路径已经安全”
+
+`subprocess.run(["docker", ...], shell=False)` 只消除了 shell 拼接问题，不会自动建立路径授权。阶段 F 还额外执行：
+
+- dataset 必须真实存在于声明 workspace，路径链不能含符号链接；
+- staging 和四个 bind source 必须位于 `D:\dsh-worker` 受控根；
+- worker root 不能是盘符根，也不能含破坏 `--mount` CSV 语法的字符；
+- export 必须位于本次 `RuntimeSpec.output_dir`；
+- collect 再次拒绝绝对路径、`..`、symlink、越界目标和 hash/size 不匹配。
+
+### 5.13 Docker logs 的 stderr 不等于业务失败
+
+真实 fixture 的 Data-Juicer 配置、进度和 warning 主要出现在 Docker stderr，即使容器最终退出 0。阶段 F 按 Docker stdout/stderr 原样分别保存，但状态仍由 inspect 的退出码/OOM、result manifest 和文件完整性共同决定。
+
+### 5.14 共享 venv 指纹必须带上计算时点和源码 identity
+
+阶段 F 最终 `pip check` 通过，且 site-packages 没有本阶段测试时刻的新安装痕迹。当前规范化 freeze hash 是 `d1bfc3a4c4643576dbffdccf85723fba2cf84c800c05c9010f6a3551443477d7`，但它不能与阶段 E 的 `4c032...` 直接解释为“阶段 F 安装了包”：两次检查之间仓库 HEAD 和 editable VCS identity 已变化，且阶段 F 开始前没有重新记录同算法的 before 值。后续阶段必须在第一项可能导入项目代码的测试之前先取 before hash；没有 before 值时只能报告当前事实，不能猜差异来源。
+
 ## 6. 阶段 E 已实施的设计决定：通用 RunHandle 不暴露 Docker 字段
 
 ### 6.1 决定
@@ -362,11 +403,11 @@ image_id
 6. fake backend 可以使用任意不透明 ref 通过同一 contract，证明上层没有依赖 ref 格式；
 7. handle 的持久化格式有 schema version，时间统一为 UTC。
 
-阶段 F 的 Docker Adapter 必须通过同一 contract，并补充容器重启恢复和 image provenance 测试。
+阶段 F 的 Docker Adapter 已通过同一 contract，并补充了容器重启恢复和 image provenance 测试。
 
 ### 6.5 为什么选择此方案
 
-阶段 E 已有 LocalProcess Adapter 和独立 fake backend 通过同一 interface，证明 `PlanRunner` 不依赖进程身份格式；阶段 F 会加入第二个生产 Adapter——Docker。选择在 E 先建立 seam，是为了在迁移 Popen 后直接以 contract 实现 Docker，避免把 Docker 分支临时塞回 `PlanRunner`。通用信封保持 interface 小；进程、Docker 和未来 Kubernetes 的恢复复杂度留在各自实现内。
+阶段 E 已有 LocalProcess Adapter 和独立 fake backend 通过同一 interface，证明 `PlanRunner` 不依赖进程身份格式；阶段 F 随后加入第二个生产 Adapter——Docker。选择在 E 先建立 seam，使阶段 F 能直接按 contract 实现 Docker，避免把 Docker 分支临时塞回 `PlanRunner`。通用信封保持 interface 小；进程、Docker 和未来 Kubernetes 的恢复复杂度留在各自实现内。
 
 ## 7. 阶段 E 实施结果
 
@@ -387,4 +428,58 @@ data_juicer/tools/plan_flow/execution/local_worker.py
 
 最终窄回归结果为 45 passed、2 deselected；两项 operator catalog 测试因仓库 `LazyLoader` 会自动安装可选 Transformers 而有意跳过，它们在阶段 E 的 runner-only 变更前已经通过。测试前后共享 venv 的规范化 freeze hash 相同，`pip check` 通过，没有遗留 local worker。
 
-下一步按原规划进入阶段 F。除本文件第 6 节已经实施的 handle 约束外，不在本文重复阶段 F 的既有设计。
+阶段 E 的 handle 约束已在阶段 F 原样保持，没有为了 Docker 增加 backend-specific 公共字段。
+
+## 8. 阶段 F 实施结果
+
+实现位置：
+
+```text
+data_juicer/tools/plan_flow/execution/docker.py
+data_juicer/tools/plan_flow/execution/spec.py
+data_juicer/tools/plan_flow/runner.py
+tests/tools/plan_flow/test_docker_backend.py
+```
+
+### 8.1 创建与隔离
+
+Adapter 使用安全参数数组调用 Docker CLI，没有命令字符串或 shell 重定向。每次运行生成随机 `backend_ref` 和受控 staging 根，并固定使用：
+
+```text
+user 10001:10001
+read-only rootfs
+network none
+cap-drop ALL
+no-new-privileges
+pids 256
+2 CPU
+8 GiB memory / memory-swap
+1 GiB noexec,nosuid tmpfs
+input + bundle readonly
+output + work writable
+```
+
+这些是当前 `DockerResourceLimits` 默认值，可通过类型化配置收窄或调整；不能由计划内容提供任意 Docker 参数。
+
+### 8.2 生命周期和恢复
+
+已覆盖 created/running/exit 0/nonzero/OOM/deadline/cancel/missing 映射。cancel 先写 `cancellation_requested`，再 `docker stop --time <grace>`，失败时 `docker kill`。新建 `DockerBackend` 实例只使用通用 handle 和持久化私有记录，能继续 inspect/collect，证明恢复不依赖旧 Python 对象。
+
+当前尚无 broker，因此规划中的全局 label 扫描/orphan 对账没有伪装成已完成；Adapter 已在容器写入 `dj.managed`、run、task、backend-ref labels，为后续 broker 对账提供稳定事实。
+
+### 8.3 收集、provenance 与 cleanup
+
+容器退出 0 后并不直接宣布成功。Adapter 会验证 result manifest identity、清单字段、相对路径、文件类型、size 和 SHA-256，再原子复制到业务 output。`RunResult.provenance` 是收集结果，不是控制 handle；`PlanRunner` 将其写入 run state，同时保存 `runtime-provenance.json`。
+
+成功 cleanup 删除容器和受控 `work`，保留 input/bundle/output/logs/provenance；失败 cleanup 删除容器但保留 `work` 供诊断。cleanup 自身写 `cleanup.json`，然后删除 Adapter 私有状态。真实成功 fixture 已验证该策略，最终 `dj.managed=true` 容器数为 0。
+
+### 8.4 验证结果与诚实边界
+
+- Docker/entry/backend 窄回归：32 passed、1 integration skipped；
+- 显式真实 Docker integration：1 passed；
+- 较宽 Plan Flow 回归曾得到 53 passed、1 skipped，但包含已知会访问 operator catalog 的测试，因此不把它作为共享 venv 无副作用证明；
+- Python compile、`git diff --check`、`pip check` 通过；
+- Docker Desktop 29.7.2，真实运行固定 image ID `sha256:c8815bf653a3e4fe7946ce1bf1c5501a37949b44401dfe06914c77a30db76490`；
+- 没有遗留 managed container。
+
+阶段 F 没有实现模型、自定义算子或 postprocess。Adapter 对这些输入显式返回 unsupported 错误，这是当前安全边界，不是遗漏执行。下一步可按原规划进入阶段 G；后续内容与规划一致的部分不在本文重复。
