@@ -20,7 +20,7 @@ MCP 服务器没有独立业务工作区。源码目录和进程 cwd 只是实�
 
 1. 验证 `requirement_ready` 交接契约及输入 profile。输入路径发生变化、profile 缺失或明显过期时，回退前置 Skill 重新检查；正常情况下不得重复调用 `inspect_input`。
 2. 从已确认的目标、判断单位、语义边界、输出和验收标准生成少量独立的原子能力需求，先归并共享同一实现的业务判断，再把当前 `requirement_ready` TaskSpec 版本的全部原子需求放进一次 `mcp__dj__search_capabilities` 批量调用。自然语言需求应规范化为简短英文能力查询；plan-flow 只使用服务端 BM25，不要求或调用 regex。已知完整算子名时由服务端走精确名称快路径。正常检索每个 TaskSpec 版本最多一次。
-3. 只使用返回的 `runtime` 判断服务器配置。严禁通过 DSH 文件工具读取或检查环境变量文件，也不得按模型名字符串猜测模态或自行替换服务器默认模型。
+3. `search_capabilities` 只用于发现算子，不返回也不得探测服务器凭证、base URL 或默认模型。运行配置由 MCP 保持私有；只有方案已经选中 API 算子并调用 `prepare_plan` 时，MCP 才按该算子的实际需要解析配置。严禁通过 DSH 文件工具读取或检查环境变量文件。
 4. 能力探索可能暴露新的权限、成本、可行性或业务取舍。只对仍需用户决定且会实质改变 Pipeline 的新 Material Ambiguity 提问；不得重新打开已确认的需求，除非能力证据表明其不可实现。
 5. `search_capabilities` 返回的是从 DJ 现有 `OPRecord/OPSearcher` 目录检索出的紧凑算子定义，并对跨需求重复算子去重；不得把候选数量误当成最终 Pipeline 的算子数量上限。对进入 shortlist 或准备写入 Recipe 的算子，按精确名称批量调用 `mcp__dj__get_capability_schemas` 加载完整结构化 schema。加载已有候选的 schema 不算再次检索，最终真实需要的算子可以超过 5 个。必须检查完整 schema 后才能认定算子适用，再形成内存中的候选方案：规范化 recipe、重要参数、必要 postprocess、风险、验收映射和能力 gap。确认前不得写脚本、修改工作区或调用 `prepare_plan`。
 6. 向用户展示具体方案与验收映射，并请求 `确认并生成计划`、`修改方案` 或 `取消任务`。`ask_user_question` 可用时必须调用；不可用时使用简明文本。只有明确选择 `确认并生成计划` 才能继续。
@@ -52,7 +52,7 @@ postprocess: []
 
 只使用能力检索实际返回的算子名和参数。脚本必须在 `prepare_plan` 前存在于工作区内，MCP 会把它快照进不可变计划包。不得在 plan、recipe、脚本参数、报告或工具调用中放入明文密钥。
 
-使用 API 算子时省略 `api_key` 和 `base_url`。使用 API VLM 算子时设置 `is_api_model: true`，通常省略 `api_or_hf_model`；`prepare_plan` 会采用 `runtime.default_models.vlm` 声明的服务器默认模型。用户明确指定的模型可以覆盖默认值，但必须作为重要 Plan 参数展示。运行配置缺失时只报告缺失能力并让用户重新配置、重启 MCP，不得检查密钥文件。
+使用 API 算子时省略 `api_key` 和 `base_url`。使用 API VLM 算子时设置 `is_api_model: true`，用户未指定模型时通常省略 `api_or_hf_model`；只有该算子已经进入 Recipe 后，`prepare_plan` 才会从服务器私有配置解析默认 VLM，并把解析后的非秘密模型名写入规范化 Plan。用户明确指定的模型可以覆盖默认值，但必须作为重要 Plan 参数展示。若所选算子缺少凭证、默认模型或其他运行配置，`prepare_plan.validation.errors` 会给出具体算子、缺少项、配置文件与重启提示；向用户原样说明并停止审批，绝不得读取密钥文件，也不得因为服务器可能配置了某种模型而倒推或改变算子选择。
 
 ## 工具范围
 

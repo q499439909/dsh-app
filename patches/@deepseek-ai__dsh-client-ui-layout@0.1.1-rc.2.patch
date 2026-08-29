@@ -1,0 +1,294 @@
+diff --git a/lib/client.js b/lib/client.js
+index 21d631b9ba840cb804fcd204b05aa130ff16e168..ae772b1ff2ff522678effe560b1ac4a4da8aa2ff 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -11,6 +11,9 @@ window.__ModuleLoader__.load({
+ 		* LG breakpoint); a manual toggle below it re-expands over the squeezed center
+ 		* (stores.ts narrowExpanded). */
+ 		const SIDEBAR_AUTO_COLLAPSE = 1024;
++		const AUXILIARY_MIN = 420;
++		const AUXILIARY_MAX = 1200;
++		const AUXILIARY_DEFAULT = 720;
+ 		/**
+ 		* Clamp a panel width into its contract range.
+ 		* @param px - requested width.
+@@ -51,9 +54,29 @@ window.__ModuleLoader__.load({
+ 				details: 0
+ 			};
+ 		}
++		function computeAuxiliaryColumns(viewport, sidebar, details, auxiliary, maximized) {
++			const base = computeColumns(viewport, sidebar, auxiliary > 0 ? 0 : details);
++			if (auxiliary === 0) return { ...base, auxiliary: 0, auxiliaryMaximized: false };
++			const available = Math.max(0, viewport - base.sidebar);
++			if (maximized || available < AUXILIARY_MIN + 640) return {
++				sidebar: base.sidebar,
++				auxiliary: available,
++				center: 0,
++				details: 0,
++				auxiliaryMaximized: true
++			};
++			const width = clampWidth(auxiliary, AUXILIARY_MIN, Math.min(AUXILIARY_MAX, available - 640));
++			return {
++				sidebar: base.sidebar,
++				auxiliary: width,
++				center: available - width,
++				details: 0,
++				auxiliaryMaximized: false
++			};
++		}
+ 		//#endregion
+ 		//#region \0dsh-css:/home/runner/work/deepseek-harness/deepseek-harness/packages/client/ui-layout/src/client/AppFrame.module.css.mjs
+-		const css = ".pI_x6G_frame{background:var(--dsw-alias-bg-base);height:100%;transition:grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);grid-template-rows:100%;display:grid;position:relative;overflow:hidden}.pI_x6G_frame[data-dragging]{transition:none}@media (prefers-reduced-motion:reduce){.pI_x6G_frame{transition:none}}.pI_x6G_sidebarCol{background:var(--dsw-specific-sidebar-fill);border-right:1px solid var(--dsw-alias-border-l1);min-width:0;overflow:hidden}.pI_x6G_centerCol{flex-direction:column;min-width:0;display:flex;overflow:hidden}.pI_x6G_detailsCol{border-left:1px solid var(--dsw-alias-border-l2);min-width:0;overflow:hidden}.pI_x6G_frame[data-details-collapsed] .pI_x6G_detailsCol{border-left:none}.pI_x6G_handle{cursor:col-resize;z-index:2;touch-action:none;width:8px;transition:left var(--ds-transition-duration-slow) var(--ds-ease-in-out);margin-left:-4px;position:absolute;top:0;bottom:0}.pI_x6G_frame[data-dragging] .pI_x6G_handle{transition:none}@media (prefers-reduced-motion:reduce){.pI_x6G_handle{transition:none}}.pI_x6G_handle[data-side=details]:after{content:\"\";box-sizing:border-box;background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2-darkmode-thin);opacity:0;width:12px;height:32px;transition:opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out), background var(--ds-transition-duration-slow) var(--ds-ease-in-out);border-radius:10px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}.pI_x6G_detailsCol:hover~.pI_x6G_handle[data-side=details]:after,.pI_x6G_handle[data-side=details]:hover:after,.pI_x6G_handle[data-side=details][data-dragging=true]:after{opacity:1}.pI_x6G_handle[data-side=details]:hover:after,.pI_x6G_handle[data-side=details][data-dragging=true]:after{background:var(--dsw-alias-button-floating-hover);border-color:var(--dsw-alias-border-l3)}.pI_x6G_overlayLayer{z-index:20;pointer-events:none;position:absolute;inset:0}.pI_x6G_overlayLayer>*{pointer-events:auto}";
++		const css = ".pI_x6G_frame{background:var(--dsw-alias-bg-base);height:100%;transition:grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);grid-template-rows:100%;display:grid;position:relative;overflow:hidden}.pI_x6G_frame[data-dragging]{transition:none}@media (prefers-reduced-motion:reduce){.pI_x6G_frame{transition:none}}.pI_x6G_sidebarCol{background:var(--dsw-specific-sidebar-fill);border-right:1px solid var(--dsw-alias-border-l1);min-width:0;overflow:hidden}.pI_x6G_auxiliaryCol{background:var(--dsw-alias-bg-base);border-right:1px solid var(--dsw-alias-border-l2);min-width:0;overflow:hidden}.pI_x6G_frame[data-auxiliary-collapsed] .pI_x6G_auxiliaryCol{border-right:none}.pI_x6G_centerCol{flex-direction:column;min-width:0;display:flex;overflow:hidden}.pI_x6G_detailsCol{border-left:1px solid var(--dsw-alias-border-l2);min-width:0;overflow:hidden}.pI_x6G_frame[data-details-collapsed] .pI_x6G_detailsCol{border-left:none}.pI_x6G_handle{cursor:col-resize;z-index:2;touch-action:none;width:8px;transition:left var(--ds-transition-duration-slow) var(--ds-ease-in-out);margin-left:-4px;position:absolute;top:0;bottom:0}.pI_x6G_frame[data-dragging]{transition:none}@media (prefers-reduced-motion:reduce){.pI_x6G_handle{transition:none}}.pI_x6G_handle[data-side=details]:after,.pI_x6G_handle[data-side=auxiliary]:after{content:\"\";box-sizing:border-box;background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2-darkmode-thin);opacity:0;width:12px;height:32px;transition:opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out),background var(--ds-transition-duration-slow) var(--ds-ease-in-out);border-radius:10px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}.pI_x6G_detailsCol:hover~.pI_x6G_handle[data-side=details]:after,.pI_x6G_handle[data-side=details]:hover:after,.pI_x6G_handle[data-side=details][data-dragging=true]:after,.pI_x6G_handle[data-side=auxiliary]:hover:after,.pI_x6G_handle[data-side=auxiliary][data-dragging=true]:after{opacity:1}.pI_x6G_handle[data-side=details]:hover:after,.pI_x6G_handle[data-side=details][data-dragging=true]:after,.pI_x6G_handle[data-side=auxiliary]:hover:after,.pI_x6G_handle[data-side=auxiliary][data-dragging=true]:after{background:var(--dsw-alias-button-floating-hover);border-color:var(--dsw-alias-border-l3)}.pI_x6G_overlayLayer{z-index:20;pointer-events:none;position:absolute;inset:0}.pI_x6G_overlayLayer>*{pointer-events:auto}";
+ 		const tagId = "@deepseek-ai/dsh-client-ui-layout/AppFrame.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
+ 			const tag = document.createElement("style");
+@@ -63,6 +86,7 @@ window.__ModuleLoader__.load({
+ 			document.head.appendChild(tag);
+ 		}
+ 		var AppFrame_module_css_default = {
++			"auxiliaryCol": "pI_x6G_auxiliaryCol",
+ 			"centerCol": "pI_x6G_centerCol",
+ 			"detailsCol": "pI_x6G_detailsCol",
+ 			"frame": "pI_x6G_frame",
+@@ -91,6 +115,12 @@ window.__ModuleLoader__.load({
+ 				children: props.children
+ 			});
+ 		}
++		function AuxiliaryColumn(props) {
++			return (0, react_jsx_runtime.jsx)("div", {
++				className: AppFrame_module_css_default.auxiliaryCol,
++				children: props.children
++			});
++		}
+ 		/** Details column grid item; width 0 keeps the subtree mounted (never unmount on close). */
+ 		function DetailsColumn(props) {
+ 			return (0, react_jsx_runtime.jsx)("div", {
+@@ -192,10 +222,11 @@ window.__ModuleLoader__.load({
+ 				actions.setNarrow(narrow);
+ 			}, [actions, narrow]);
+ 			const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0;
+-			const cols = computeColumns(viewport, sidebarCollapsed ? 0 : panels.sidebar === 0 ? 280 : panels.sidebar, detailsSession === void 0 ? 0 : panels.details);
++			const cols = computeAuxiliaryColumns(viewport, sidebarCollapsed ? 0 : panels.sidebar === 0 ? 280 : panels.sidebar, detailsSession === void 0 ? 0 : panels.details, panels.auxiliary, panels.auxiliaryMaximized);
+ 			const colsRef = (0, react.useRef)(cols);
+ 			colsRef.current = cols;
+ 			const sidebarBase = (0, react.useRef)(0);
++			const auxiliaryBase = (0, react.useRef)(0);
+ 			const detailsBase = (0, react.useRef)(0);
+ 			const [dragging, setDragging] = (0, react.useState)(false);
+ 			const onDragEnd = (0, react.useCallback)(() => {
+@@ -209,17 +240,26 @@ window.__ModuleLoader__.load({
+ 				detailsBase.current = colsRef.current.details;
+ 				setDragging(true);
+ 			}, []);
++			const onAuxiliaryStart = (0, react.useCallback)(() => {
++				auxiliaryBase.current = colsRef.current.auxiliary;
++				setDragging(true);
++			}, []);
+ 			const onSidebarDrag = (0, react.useCallback)((dx) => {
+ 				actions.setSidebar(sidebarBase.current + dx);
+ 			}, [actions]);
+ 			const onDetailsDrag = (0, react.useCallback)((dx) => {
+ 				actions.setDetails(detailsBase.current - dx);
+ 			}, [actions]);
++			const onAuxiliaryDrag = (0, react.useCallback)((dx) => {
++				actions.setAuxiliary(auxiliaryBase.current + dx);
++			}, [actions]);
+ 			return (0, react_jsx_runtime.jsxs)("div", {
+ 				ref: frameRef,
+ 				className: AppFrame_module_css_default.frame,
+-				style: { gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` },
++				style: { gridTemplateColumns: `${cols.sidebar}px ${cols.auxiliary}px minmax(0, 1fr) ${cols.details}px` },
+ 				"data-sidebar-collapsed": sidebarCollapsed || void 0,
++				"data-auxiliary-collapsed": cols.auxiliary === 0 || void 0,
++				"data-auxiliary-maximized": cols.auxiliaryMaximized || void 0,
+ 				"data-details-collapsed": cols.details === 0 || void 0,
+ 				"data-dragging": dragging || void 0,
+ 				children: [
+@@ -230,6 +270,7 @@ window.__ModuleLoader__.load({
+ 							width: cols.sidebar
+ 						})
+ 					}),
++					(0, react_jsx_runtime.jsx)(AuxiliaryColumn, { children: renderSlot("shell.auxiliary", { width: cols.auxiliary, maximized: cols.auxiliaryMaximized }) }),
+ 					(0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)(CenterColumn, { children: renderSlot("conversation", {}) }), (0, react_jsx_runtime.jsx)(DetailsColumn, { children: renderSlot("details", {}) })] }),
+ 					(0, react_jsx_runtime.jsx)("div", {
+ 						className: AppFrame_module_css_default.overlayLayer,
+@@ -243,6 +284,13 @@ window.__ModuleLoader__.load({
+ 						onDrag: onSidebarDrag,
+ 						onEnd: onDragEnd
+ 					}),
++					cols.auxiliary > 0 && !cols.auxiliaryMaximized && (0, react_jsx_runtime.jsx)(DragHandle, {
++						side: "auxiliary",
++						left: cols.sidebar + cols.auxiliary,
++						onStart: onAuxiliaryStart,
++						onDrag: onAuxiliaryDrag,
++						onEnd: onDragEnd
++					}),
+ 					cols.details > 0 && (0, react_jsx_runtime.jsx)(DragHandle, {
+ 						side: "details",
+ 						left: viewport - cols.details,
+@@ -278,6 +326,8 @@ window.__ModuleLoader__.load({
+ 			return (0, _deepseek_ai_dsh_client_runtime_client.defineStore)({
+ 				init: () => ({
+ 					sidebar: 280,
++					auxiliary: 0,
++					auxiliaryMaximized: false,
+ 					details: 0,
+ 					narrow: false,
+ 					narrowExpanded: false
+@@ -289,6 +339,9 @@ window.__ModuleLoader__.load({
+ 					setDetails: (d, px) => {
+ 						d.details = clampWidth(px, 300, 520);
+ 					},
++					setAuxiliary: (d, px) => {
++						if (d.auxiliary > 0) d.auxiliary = clampWidth(px, AUXILIARY_MIN, AUXILIARY_MAX);
++					},
+ 					toggleSidebar: (d) => {
+ 						if (d.narrow) d.narrowExpanded = !d.narrowExpanded;
+ 						else d.sidebar = d.sidebar === 0 ? 280 : 0;
+@@ -303,6 +356,17 @@ window.__ModuleLoader__.load({
+ 					},
+ 					closeDetails: (d) => {
+ 						d.details = 0;
++					},
++					toggleAuxiliary: (d) => {
++						d.auxiliary = d.auxiliary === 0 ? AUXILIARY_DEFAULT : 0;
++						d.auxiliaryMaximized = false;
++					},
++					closeAuxiliary: (d) => {
++						d.auxiliary = 0;
++						d.auxiliaryMaximized = false;
++					},
++					toggleAuxiliaryMaximized: (d) => {
++						if (d.auxiliary > 0) d.auxiliaryMaximized = !d.auxiliaryMaximized;
+ 					}
+ 				}
+ 			});
+@@ -334,6 +398,15 @@ window.__ModuleLoader__.load({
+ 			closeDetails() {
+ 				this.#require().closeDetails();
+ 			}
++			toggleAuxiliary() {
++				this.#require().toggleAuxiliary();
++			}
++			closeAuxiliary() {
++				this.#require().closeAuxiliary();
++			}
++			toggleAuxiliaryMaximized() {
++				this.#require().toggleAuxiliaryMaximized();
++			}
+ 			#require() {
+ 				if (this.#panels === void 0) throw new Error("layout: panel actions not wired (root entry not mounted)");
+ 				return this.#panels;
+@@ -417,6 +490,10 @@ window.__ModuleLoader__.load({
+ 							kind: "single",
+ 							scope: "session"
+ 						},
++						"shell.auxiliary": {
++							kind: "single",
++							scope: "root"
++						},
+ 						"shell.overlay": {
+ 							kind: "list",
+ 							scope: "root"
+diff --git a/lib/types/client/AppFrame.d.ts b/lib/types/client/AppFrame.d.ts
+index 0ecd7f7e10fbaee157f0036bb01839644585c7ce..84960082bc07e2579abf9a4bdf965971e64561a5 100644
+--- a/lib/types/client/AppFrame.d.ts
++++ b/lib/types/client/AppFrame.d.ts
+@@ -1,7 +1,7 @@
+ import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots';
+ import type { createLayoutStore } from './stores.ts';
+ /** Full composed props: runtime share + child-slot render share + store share. */
+-export type AppFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'> & PropsStore<ReturnType<typeof createLayoutStore>>;
+-/** The three-column frame (see module doc). */
++export type AppFrameProps = PropsRuntime<'root'> & PropsRenderSlots<'sidebar' | 'shell.auxiliary' | 'conversation' | 'details' | 'shell.overlay'> & PropsStore<ReturnType<typeof createLayoutStore>>;
++/** The shell frame with an optional auxiliary work surface (see module doc). */
+ export declare function AppFrame({ useStore, useSessions, actions, renderSlot, }: AppFrameProps): import("react").JSX.Element;
+ //# sourceMappingURL=AppFrame.d.ts.map
+diff --git a/lib/types/client/index.d.ts b/lib/types/client/index.d.ts
+index aa8301d3997cf2b3046fb760c8a03b2010a0bc13..698b6c77283ee6d61305347170f29fdec04b4b2e 100644
+--- a/lib/types/client/index.d.ts
++++ b/lib/types/client/index.d.ts
+@@ -50,6 +50,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
+             scope: 'session-maybe';
+             owner: ConvOwnerProps;
+         };
++        /**
++         * Optional work surface between the navigation sidebar and conversation.
++         * It remains mounted while closed so occupants preserve local view state.
++         */
++        'shell.auxiliary': {
++            kind: 'single';
++            scope: 'root';
++            owner: AuxiliaryOwnerProps;
++        };
+         /**
+          * The right details column, shown when the layout opens it. OCCUPIED by
+          * ui-conversation's DetailsPanel, which declares the tool-details seat
+@@ -90,6 +99,11 @@ export interface SidebarOwnerProps {
+ /** Conversation owner share: business state and actions belong to the registrant. */
+ export interface ConvOwnerProps {
+ }
++/** Live geometry supplied to the auxiliary work-surface occupant. */
++export interface AuxiliaryOwnerProps {
++    width: number;
++    maximized: boolean;
++}
+ /** Details owner share: empty — sessionId arrives as a framework-standard prop. */
+ export interface DetailsOwnerProps {
+ }
+diff --git a/lib/types/client/service.d.ts b/lib/types/client/service.d.ts
+index e2a1a0cc02f511ac87a6a4bd2d523c34f9e02ae2..930e97e64c56dc62094485de2b0dc5191799084a 100644
+--- a/lib/types/client/service.d.ts
++++ b/lib/types/client/service.d.ts
+@@ -25,6 +25,12 @@ export interface ILayout {
+     openDetails(): void;
+     /** Close the details panel. */
+     closeDetails(): void;
++    /** Toggle the optional auxiliary work surface. */
++    toggleAuxiliary(): void;
++    /** Close the optional auxiliary work surface. */
++    closeAuxiliary(): void;
++    /** Toggle the auxiliary work surface between docked and maximized. */
++    toggleAuxiliaryMaximized(): void;
+ }
+ /** Cross-plugin panel-action face (ctx.layout). */
+ export declare class LayoutController implements ILayout {
+@@ -43,5 +49,8 @@ export declare class LayoutController implements ILayout {
+     openDetails(): void;
+     /** Close the details panel. */
+     closeDetails(): void;
++    toggleAuxiliary(): void;
++    closeAuxiliary(): void;
++    toggleAuxiliaryMaximized(): void;
+ }
+ //# sourceMappingURL=service.d.ts.map
+diff --git a/lib/types/client/stores.d.ts b/lib/types/client/stores.d.ts
+index a79da9e4c4d315030b0949450a64c5e42a02204e..9e4771a9ad419ede850524842af8add341d8b67b 100644
+--- a/lib/types/client/stores.d.ts
++++ b/lib/types/client/stores.d.ts
+@@ -17,6 +17,8 @@ import { type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client';
+  */
+ type LayoutState = {
+     sidebar: number;
++    auxiliary: number;
++    auxiliaryMaximized: boolean;
+     details: number;
+     narrow: boolean;
+     narrowExpanded: boolean;
+@@ -27,11 +29,15 @@ type LayoutState = {
+  */
+ type LayoutActions = {
+     setSidebar: (draft: LayoutState, px: number) => void;
++    setAuxiliary: (draft: LayoutState, px: number) => void;
+     setDetails: (draft: LayoutState, px: number) => void;
+     toggleSidebar: (draft: LayoutState) => void;
+     setNarrow: (draft: LayoutState, narrow: boolean) => void;
+     openDetails: (draft: LayoutState) => void;
+     closeDetails: (draft: LayoutState) => void;
++    toggleAuxiliary: (draft: LayoutState) => void;
++    closeAuxiliary: (draft: LayoutState) => void;
++    toggleAuxiliaryMaximized: (draft: LayoutState) => void;
+ };
+ /**
+  * Create the layout panel store handle. The preference IS the width, so

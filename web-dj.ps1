@@ -15,6 +15,9 @@ $patchFile = Join-Path $dshRoot 'dj-dsh.patch.yml'
 $pythonExe = 'D:\dj\.envs\dsh-dj\python.exe'
 $mcpTempDir = Join-Path $djRoot '.mcp-tmp'
 $mcpEnvFile = Join-Path $dshRoot 'dj-plan-flow.env'
+$operatorPluginSource = Join-Path $dshRoot 'packages\dsh-dj-operator-library'
+$dshProfileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\profiles\web'
+$operatorPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\operator-library'
 
 function Read-DotEnv {
     param([string]$Path)
@@ -54,6 +57,20 @@ if (-not (Test-Path -LiteralPath $dshBin)) {
 }
 if (-not (Test-Path -LiteralPath $pythonExe)) {
     throw "Cannot find the Data-Juicer Python environment: $pythonExe"
+}
+if (-not (Test-Path -LiteralPath $operatorPluginSource -PathType Container)) {
+    throw "Cannot find the DSH operator library plugin: $operatorPluginSource"
+}
+$operatorPluginParent = Split-Path -Parent $operatorPluginLink
+New-Item -ItemType Directory -Force -Path $operatorPluginParent | Out-Null
+if (Test-Path -LiteralPath $operatorPluginLink) {
+    $existingPluginLink = Get-Item -LiteralPath $operatorPluginLink -Force
+    $resolvedPluginTarget = @($existingPluginLink.Target | ForEach-Object { [System.IO.Path]::GetFullPath([string]$_) })
+    if ($existingPluginLink.LinkType -ne 'Junction' -or $resolvedPluginTarget -notcontains [System.IO.Path]::GetFullPath($operatorPluginSource)) {
+        throw "The DSH profile already contains a different @dsh-dj/operator-library entry: $operatorPluginLink"
+    }
+} else {
+    New-Item -ItemType Junction -Path $operatorPluginLink -Target $operatorPluginSource | Out-Null
 }
 New-Item -ItemType Directory -Force -Path $mcpTempDir | Out-Null
 $mcpEnvironment = Read-DotEnv -Path $mcpEnvFile
@@ -174,6 +191,7 @@ if (-not (Test-TcpPort -TargetPort $McpPort)) {
         TMPDIR = $mcpTempDir
         PYTHONUTF8 = '1'
         PYTHONIOENCODING = 'utf-8'
+        DJ_PLAN_FLOW_CONFIG_FILE = $mcpEnvFile
     }
     $allowedMcpEnvironmentNames = @(
         'OPENAI_API_KEY',

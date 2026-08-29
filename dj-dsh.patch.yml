@@ -12,6 +12,10 @@
 - id: tool-jobs
   disabled: false
 - insert:
+    - id: dj-operator-library
+      name: '@dsh-dj/operator-library'
+      config:
+        catalogUrl: http://127.0.0.1:8010/operator-catalog
     - id: mcp-dj
       name: '@deepseek-ai/dsh-mcp-client'
       config:
