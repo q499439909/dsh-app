@@ -1,10 +1,10 @@
-# Windows 本机 Docker Worker：阶段 A–D 接手记录
+# Windows 本机 Docker Worker：阶段 A–E 接手记录
 
 更新时间：2026-08-29
 
 ## 1. 文档用途
 
-本文是阶段 A–D 完成后的事实型接手文档，回答三个问题：
+本文是阶段 A–E 完成后的事实型接手文档，回答三个问题：
 
 1. 当前已经完成并实际验证了什么；
 2. 实施过程中哪些地方不能靠猜；
@@ -16,7 +16,7 @@
 
 ## 2. 当前结论
 
-阶段 A、B、C、D 的本机验证范围已经完成，可以进入阶段 E。
+阶段 A、B、C、D、E 的本机验证范围已经完成，可以进入阶段 F。
 
 当前已经具备：
 
@@ -26,8 +26,10 @@
 - 严格校验 `run-spec`、路径、挂载权限和 recipe hash 的容器入口；
 - 在只读根文件系统、断网和资源限制下成功运行的无模型 Data-Juicer fixture；
 - 结构化失败码、输出清单和可复核的文件 hash。
+- 通用 `ExecutionBackend` seam 和不泄漏 PID/Docker 字段的 `RunHandle`；
+- 已从 `PlanRunner` 移出的 `LocalProcessBackend` 进程生命周期实现。
 
-尚未实现的是阶段 E/F 的 `ExecutionBackend` seam、Docker 生命周期管理和 broker。当前成功的容器运行由人工等价命令完成，不应误写成“DockerBackend 已完成”。
+尚未实现的是阶段 F 的 Docker Adapter、Docker 生命周期管理和 broker。当前成功的容器运行仍由人工等价命令完成，不应误写成“DockerBackend 已完成”。
 
 ## 3. 接手时的代码和制品位置
 
@@ -63,6 +65,9 @@ D:\dsh-worker\build-results\dj-plan-flow-cpu-local-v1\
 
 D:\dsh-worker\build-results\dj-plan-flow-container-entry-local-v1\
   validation-summary.json
+
+D:\dsh-worker\build-results\dj-plan-flow-execution-backend-local-v1\
+  validation-summary.json
 ```
 
 最终成功 fixture：
@@ -85,6 +90,7 @@ D:\dsh-worker\runs\run-d004
 | B | 完成当前阶段范围 | `D:\dsh-worker` 七个一级目录存在；ACL 仅 SYSTEM、Administrators 和当前用户拥有 FullControl；测试使用 `tenant_id=local-test`；所有 fixture 均位于受控根 | `allowed_worker_root` 的 broker 强制执行尚未存在，因为 broker/DockerBackend 属于后续阶段 |
 | C | 完成 | 固定基础镜像 digest；`uv==0.12.5`；`uv sync --frozen`；core + tools；非 editable 安装；非 root；只读 rootfs、断网、drop capabilities、no-new-privileges 和 tmpfs smoke test 通过 | GPU/CUDA、通用视觉/音频依赖、生产镜像发布与 registry |
 | D | 完成 | 严格 `run-spec`；容器路径物化；recipe hash；模型声明和只读挂载；输入/bundle 只读、output/work/tmp 可写；DJ 默认执行器；result manifest；稳定退出码；成功和失败 fixture | timeout/cancel、100 条记录、自定义算子、tiny model；这些继续按原规划逐步验证 |
+| E | 完成 | 通用 execution interface；不透明 `backend_ref`；LocalProcess Adapter；PID 私有状态；PlanRunner 依赖注入；inspect/cancel/collect/cleanup；重启后恢复；`RUNNER_LOST`；contract tests | Docker Adapter 和容器生命周期属于阶段 F |
 
 ### 4.1 阶段 A 的当前主机事实
 
@@ -280,13 +286,13 @@ Data-Juicer 会打印很大的配置表和进度日志，并带有当前仓库�
 
 日志用于诊断，不应替代结构化状态和清单。
 
-## 6. 阶段 E 前置设计决定：通用 RunHandle 不暴露 Docker 字段
+## 6. 阶段 E 已实施的设计决定：通用 RunHandle 不暴露 Docker 字段
 
 ### 6.1 决定
 
 采纳“不要让通用 `RunHandle` 天然成为 Docker Handle”的建议，并进一步约束 `backend_ref` 为后端生成的不透明字符串。
 
-本文替代原规划 **E4 RunHandle** 的 JSON 示例。阶段 E 应采用类似以下通用信封：
+本文替代原规划 **E4 RunHandle** 的 JSON 示例。阶段 E 已实现以下通用信封：
 
 ```python
 @dataclass(frozen=True)
@@ -326,14 +332,14 @@ DockerBackend
 
 ### 6.3 当前代码迁移要求
 
-当前 `PlanRunner.start()` 直接调用 `subprocess.Popen()`，并把以下字段写入通用 `run.json`：
+阶段 E 迁移前，`PlanRunner.start()` 直接调用 `subprocess.Popen()`，并把以下字段写入通用 `run.json`：
 
 ```text
 pid
 pid_create_time
 ```
 
-阶段 E 迁移时，这两个字段必须移入 `LocalProcessBackend` 私有状态；不要保留在通用 run state 中再额外复制一份 `RunHandle`。
+阶段 E 已将这两个字段移入 `LocalProcessBackend` 私有状态，没有保留在通用 run state 中。
 
 同理，Docker Adapter 后续产生的：
 
@@ -344,29 +350,41 @@ image_id
 
 不能进入通用 `RunHandle`。`image_id` 仍然必须出现在不可变的运行 provenance/审计结果中，但这是 collect 后的事实记录，不是上层控制 Docker 所需的句柄字段。
 
-### 6.4 阶段 E contract test 必须新增的约束
+### 6.4 阶段 E contract test 已覆盖的约束
 
-除原规划的 backend contract test 外，至少验证：
+当前 contract tests 已验证：
 
 1. `PlanRunner` 不直接导入或调用 `subprocess`、Docker client；
 2. 通用 `RunHandle` 没有 `pid`、`container_id`、`image_id`、`pod_uid`；
 3. `backend_ref` 由 Adapter 创建，拒绝调用方伪造或跨 backend 使用；
-4. Local 和 Docker Adapter 都能仅凭自身私有记录完成 inspect/cancel/collect/cleanup；
+4. Local Adapter 能仅凭自身私有记录完成 inspect/cancel/collect/cleanup；
 5. backend 私有记录丢失时返回稳定的 `RUNNER_LOST`，而不是让上层猜进程或容器；
 6. fake backend 可以使用任意不透明 ref 通过同一 contract，证明上层没有依赖 ref 格式；
 7. handle 的持久化格式有 schema version，时间统一为 UTC。
 
+阶段 F 的 Docker Adapter 必须通过同一 contract，并补充容器重启恢复和 image provenance 测试。
+
 ### 6.5 为什么选择此方案
 
-阶段 E 已经存在两个真实 Adapter：LocalProcess 和 Docker，因此这个 seam 不是假设性的抽象。通用信封保持 interface 小；进程、Docker 和未来 Kubernetes 的恢复复杂度留在各自实现内。删除该 seam 时，这些分支复杂度会重新扩散到 `PlanRunner`，说明该模块具有实际深度和维护价值。
+阶段 E 已有 LocalProcess Adapter 和独立 fake backend 通过同一 interface，证明 `PlanRunner` 不依赖进程身份格式；阶段 F 会加入第二个生产 Adapter——Docker。选择在 E 先建立 seam，是为了在迁移 Popen 后直接以 contract 实现 Docker，避免把 Docker 分支临时塞回 `PlanRunner`。通用信封保持 interface 小；进程、Docker 和未来 Kubernetes 的恢复复杂度留在各自实现内。
 
-## 7. 接手后的第一步
+## 7. 阶段 E 实施结果
 
-按原规划进入阶段 E，但先以本文件第 6 节替代原 E4：
+实现位置：
 
-1. 为 `RuntimeSpec`、通用 `RunHandle`、`RunStatus`、`RunResult` 定义稳定 interface；
-2. 将现有 Popen 和 PID 身份校验完整移入 `LocalProcessBackend`；
-3. 用 fake backend 和 LocalProcess Adapter 建立 contract test；
-4. 确认通用层没有 backend-specific 字段后，再开始 Docker Adapter。
+```text
+data_juicer/tools/plan_flow/execution/spec.py
+data_juicer/tools/plan_flow/execution/backend.py
+data_juicer/tools/plan_flow/execution/local_process.py
+data_juicer/tools/plan_flow/execution/local_worker.py
+```
 
-除此之外，后续顺序和安全要求继续遵循原规划，不在本文重复。
+`PlanRunner` 现在接收注入的 backend，不再导入或调用 `subprocess`/`psutil`。Local Adapter 的私有状态位于：
+
+```text
+<workspace>/.dj/execution/local-process/<backend_ref>.json
+```
+
+最终窄回归结果为 45 passed、2 deselected；两项 operator catalog 测试因仓库 `LazyLoader` 会自动安装可选 Transformers 而有意跳过，它们在阶段 E 的 runner-only 变更前已经通过。测试前后共享 venv 的规范化 freeze hash 相同，`pip check` 通过，没有遗留 local worker。
+
+下一步按原规划进入阶段 F。除本文件第 6 节已经实施的 handle 约束外，不在本文重复阶段 F 的既有设计。
