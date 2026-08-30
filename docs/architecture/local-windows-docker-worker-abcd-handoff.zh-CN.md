@@ -1,10 +1,10 @@
-# Windows 本机 Docker Worker：阶段 A–G 接手记录
+# Windows 本机 Docker Worker：阶段 A–I 接手记录
 
 更新时间：2026-08-30
 
 ## 1. 文档用途
 
-本文是阶段 A–G 完成后的事实型接手文档，回答三个问题：
+本文是阶段 A–I 完成后的事实型接手文档，回答三个问题：
 
 1. 当前已经完成并实际验证了什么；
 2. 实施过程中哪些地方不能靠猜；
@@ -16,7 +16,7 @@
 
 ## 2. 当前结论
 
-阶段 A、B、C、D、E、F、G 的本机验证范围已经完成，可以进入阶段 H。
+阶段 A、B、C、D、E、F、G、H 以及 I 的 loopback execution broker 演练已经完成。下一步是规划中的完整隔离、故障与 orphan 对账矩阵。
 
 当前已经具备：
 
@@ -34,8 +34,14 @@
 - 严格 ModelManifest、受控 staging、原子发布、逐文件与聚合 hash 复核的本机 ModelStore；
 - `model-store://` 逻辑 URI、Docker 只读模型挂载和模型 provenance；
 - 两个真实容器并发读同一模型、容器内修改失败、容器删除后模型仍存在的验证。
+- 审批门禁、不可变 proposal、离线派生镜像和本机 capability catalog；
+- H1 无模型算子的“缺能力 → Builder → 注册 → 预览 → 复用”；
+- H2 新算子、新 CPU Runtime 与阶段 G ModelArtifact 的断网推理闭环。
+- 只监听数值 loopback、只接收批准计划引用的 Execution Broker；
+- 固定本机 profile、capability/image allowlist、模型 hash 契约和 `local-cpu` 单并发门禁；
+- HTTP 创建/查询/取消/清理、进程重启恢复和统一错误结构。
 
-尚未实现的是阶段 H 自定义算子闭环和后续 broker/API。Docker Adapter 当前支持本地 dataset、默认 executor 和已发布本机模型；postprocess、自定义算子和非默认 executor 仍会显式拒绝，不会静默降级。
+尚未完成的是完整测试矩阵中的主动 Docker label orphan 扫描、压力/故障注入和 Windows 自启动部署；当前 broker 是可直接运行的 loopback 进程，不是已注册的 Windows 服务。Docker Adapter 当前支持本地 dataset、默认 executor、已发布本机模型，以及由 Capability Builder 烘焙并由 bootstrap 预注册算子的派生 Runtime。recipe 直接传 `custom_operator_paths`、postprocess 和非默认 executor 仍会显式拒绝，不会静默降级。
 
 ## 3. 接手时的代码和制品位置
 
@@ -45,7 +51,7 @@
 规划与接手文档：D:\dsh-app
 Data-Juicer 源码：D:\dj\data-juicer-1.5.4
 受控 worker 根：D:\dsh-worker
-当前检查 commit：d56e53d22e9bc87d692002539c017d9d3946ae07
+当前检查 commit：e8994bc8e5419eee49b530984a8b5ee18336c760
 ```
 
 Data-Juicer 工作树当前是 dirty worktree，里面同时存在用户先前修改和 A–F 修改。不要使用 `git reset --hard`、`git checkout --` 或按整个工作树回退。接手者只能按文件和 diff 分辨自己的修改。
@@ -76,6 +82,14 @@ D:\dsh-worker\build-results\dj-plan-flow-execution-backend-local-v1\
   validation-summary.json
 
 D:\dsh-worker\build-results\dj-plan-flow-docker-backend-local-v1\
+  validation-summary.json
+
+D:\dsh-worker\build-results\dj-plan-flow-capability-h-local-v1\
+  validation-summary.json
+
+D:\dsh-worker\build-results\dj-plan-flow-broker-i-local-v1\
+  pip-freeze.before.txt
+  pip-freeze.after.txt
   validation-summary.json
 
 D:\dsh-worker\build-results\dj-plan-flow-model-store-local-v1\
@@ -602,4 +616,177 @@ license: approved-for-test
 
 最终选定回归为 45 passed，包含三个显式 Docker integration；Ruff、Python compile、`git diff --check`、`pip check` 通过。最终回归前后规范化 freeze hash 均为 `b1576420911e2c336d677b4851c82f5439d54a5e3a8cd0181f77edebaf2f3a05`，基础镜像 ID 前后均为 `sha256:c8815bf653a3e4fe7946ce1bf1c5501a37949b44401dfe06914c77a30db76490`，没有遗留 managed/model-test 容器。
 
-下一步可按原规划进入阶段 H。阶段 H 的 capability proposal、派生镜像和自定义算子内容与规划一致，此处不重复。
+## 10. 阶段 H 实施结果
+
+### 10.1 Capability Builder seam
+
+实现位置：
+
+```text
+data_juicer/tools/plan_flow/capability.py
+tests/tools/plan_flow/test_capability_builder.py
+tests/fixtures/plan_flow/capabilities/h1/
+tests/fixtures/plan_flow/capabilities/h2/
+```
+
+公开对象保持窄接口：`CapabilityBuilder.prepare/approve/publish` 和 `LocalCapabilityCatalog.resolve`。proposal 会把受控 source 与 wheelhouse 快照到 `D:\dsh-worker\broker-state\capability-proposals`，审批绑定精确 content hash；发布前再次核对快照、基础镜像 tag 当前指向的不可变 image ID，并在断网 build 中只安装本地 wheels。构建后先做 import/registry test，再原子登记 descriptor。
+
+`CapabilityDescriptor` 显式固定 `source_hash`、`dependency_lock_hash`、`base_image_id`、派生 `backend_ref.image_id` 和 model refs。通用 `RunHandle` 没有增加 `container_id` 或 `image_id`；Docker identity 仍只存在 backend 私有记录或 capability 的 Docker-specific `backend_ref`。这落实了阶段 E 前的抽象决定，没有把 Docker 字段重新泄漏到通用 handle。
+
+Builder 不接受 workspace/run input 作为 source，只接受 `D:\dsh-worker\fixtures\capabilities` 下的真实目录，拒绝 symlink。基础镜像同时保留可用于 Dockerfile `FROM` 的本地 ref 和审批绑定的 image ID：前者只负责本机解析，后者才是身份。不要把裸 `sha256:...` 直接写进 `FROM`；Docker 会把它当作 registry repository 解析。
+
+### 10.2 H1：无模型 capability
+
+基础镜像内已确认找不到 `dsh_demo_token`。H1 使用仓库 fixture 生成本地 wheel，新算子 `demo_text_signature_mapper` 只输出规范化文本的短 SHA-256 签名，不访问模型和网络。
+
+最终发布事实：
+
+```text
+capability_id:       demo-text-signature-v2
+content_hash:        sha256:ad578309a0a604cf3f8117fd8a3cdcaf3c7966a2eaca0c7c5a9406e0013c7f71
+source_hash:         sha256:0653614d80ec09395f836fb33da06bbec8098eede10e3fdc16c6cb3880c9906b
+dependency_lock:     sha256:10022f39728a0202a3b8434cdd1fa6d786b9ad4f88f35d5a71dfd6c312f79b6b
+derived image ID:    sha256:87b81ce6a47536b31cb736b3d41b66cfd236ba2e39989b99831798808a188cba
+base image ID:       sha256:c8815bf653a3e4fe7946ce1bf1c5501a37949b44401dfe06914c77a30db76490
+model refs:          []
+```
+
+未审批 publish 返回 `CAPABILITY_APPROVAL_REQUIRED`，错误审批 hash 返回 `CAPABILITY_CONTENT_CHANGED`。真实 DockerBackend preview 输入 `Hello   Builder`，输出 `demo_signature=48572721987d9d63`。再次 publish 同一 proposal 直接返回 catalog descriptor，不执行第二次 build。
+
+### 10.3 H2：Google BERT-Tiny ModelArtifact 与推理
+
+只下载固定 revision `30b0a37ccaaa32f332884b96992754e246e48c5f` 的三个文件，没有下载 pickle 权重：
+
+```text
+artifact_id: google-bert-uncased-l2-h128-a2-r30b0a37
+config.json:       382 bytes
+model.safetensors: 17739144 bytes
+vocab.txt:         231508 bytes
+aggregate hash:    sha256:e962e2ee0f9a03d84d04461e30a0fdac2a8a3c53351eb325442b9808a3407b5c
+license:           approved-for-test（Apache-2.0 evidence 见规划文档）
+```
+
+文件先进入 worker fixture，再严格走阶段 G 的 `LocalModelInstaller.stage_local → LocalModelStore.publish → resolve/verify`。最终模型仍在 `D:\dsh-worker\models\google-bert-uncased-l2-h128-a2-r30b0a37`，不在镜像 layer 中。
+
+H2 wheelhouse 是 Linux CPython 3.12 的 CPU-only 离线集合，总计 230158869 bytes，核心版本为 `torch==2.8.0+cpu`、`transformers==4.57.1`、`tokenizers==0.22.2`、`safetensors==0.8.0`。这些包没有安装到共享 Windows venv。
+
+最终发布事实：
+
+```text
+capability_id:       demo-bert-feature-v3
+content_hash:        sha256:5d93c4226b1f2c7f2887d1403e01023e60f657c9bd5eb660a63f43f8ae11cfba
+source_hash:         sha256:cb4a56152d96f747eadfcc83c7b8ae2af7a3d6c56fb265afdaabffac0eaf9cd9
+dependency_lock:     sha256:a0ec9a243eed7caf51517b307ad0797b6570baf0e55748e4d165e1bfcc443e6b
+derived image ID:    sha256:25da6864fdb67b7a85bc827300db7bb0784923d14ba53cb2b9b5df2eb05ece67
+model artifact hash: sha256:e962e2ee0f9a03d84d04461e30a0fdac2a8a3c53351eb325442b9808a3407b5c
+```
+
+`demo_bert_feature_mapper` 使用本地目录、`local_files_only=True`、CPU、eval 和 inference mode。正式 preview provenance 明确记录 `read_only=true`、`network=none`、上述 image ID 与 ModelArtifact hash。固定输入两次输出完全一致：
+
+```text
+hidden_size: 128
+token_count: 14
+l2_norm: 10.088903
+checksum_sha256: 3dcaf65ee0a160fe87efb609b862cba50852377cc7f18aee110208ae0e889b77
+```
+
+第二条不同输入得到 `69f34183038a47fdc2608f7b35eac0bf72d48029357cf9982a2c63c8bb03e6ad`，证明 fixture 没有返回常量。第二次请求复用同一 v3 image ID 和同一 ModelArtifact hash。成功 cleanup 后 managed container 数为 0，镜像内搜索不到 `model.safetensors`，ModelStore 再次 verify 通过。
+
+### 10.4 实施中不能靠猜的坑
+
+1. `FROM sha256:<local-image-id>` 不是可靠的 Dockerfile 写法；必须使用本地 ref，并在构建前 inspect、比对已审批的 image ID。
+2. Transformers 需要模型目录。阶段 G 原先只支持 `model-store://artifact/file`；H 增加了明确的 `model-store://artifact` 根目录语义，仍只会物化到只读 `/models/<artifact>`。
+3. Data-Juicer/jsonargparse 会把自定义算子构造函数中“没有默认值”的参数当成 CLI 必填项，可能在合并 YAML 时误报缺失。`model_path` 使用空默认值，并在算子初始化时自行做明确校验。
+4. 已发布 capability 不原地覆盖。早期 H2 v1 暴露参数解析问题，descriptor schema 又在审计时补齐 model hash，因此最终有效版本是 v3；v1/v2 是不可变调试历史，不应被当成当前入口。
+5. safetensors 与 pickle 权重不能混收。当前 artifact 清单只有 config/safetensors/vocab，任何额外文件都会被 G 的 inventory 校验拒绝。
+6. “断网”必须同时存在于 build 和 run：Builder 使用本地 wheelhouse 且 `docker build --network=none`，正式容器使用 `--network none`，算子再设置 `local_files_only=True`。
+7. H 开始摘要记录的规范化 freeze hash `48a665...` 无法用文档既定算法复现；当前同算法结果为 `db54d161...`。没有 H 时段内的 site-packages 写入痕迹，`pip check` 通过，且所有依赖均下载到 worker/tool cache，但不能据此伪称跨整个 H 的 freeze hash 已严格相等。后续阶段必须把 before/after 原始 freeze 文本一并落盘，不能只留摘要 hash。
+
+### 10.5 回归与下一步
+
+阶段 H 相关 Plan Flow 回归为 `67 passed, 3 skipped`；三个 skip 都是显式 opt-in Docker integration。该最终回归窗口前后的规范化 freeze hash 都是 `db54d161ab6f0e1f95c2cb0f66e89c3d7138db5abe5a21994499f2ab9f10b1ec`，`pip check` 通过；这只能证明该窗口不变，不能抹去 10.4 第 7 项的阶段起点审计缺口。Ruff 目标检查通过，基础镜像 ID 保持 `sha256:c881...76490`。H1/H2 的真实 Docker preview、重复推理、不同输入、模型未 bake、cleanup 后复核均已单独执行通过。
+
+## 11. 阶段 I 实施结果
+
+### 11.1 Broker interface 与深度
+
+实现位置：
+
+```text
+data_juicer/tools/plan_flow/broker.py
+data_juicer/tools/plan_flow/runner.py
+data_juicer/tools/plan_flow/execution/docker.py
+tests/tools/plan_flow/test_broker.py
+```
+
+HTTP interface 保持为四个动作：
+
+```text
+POST /v1/runs
+GET  /v1/runs/{run-id}
+POST /v1/runs/{run-id}:cancel
+POST /v1/runs/{run-id}:cleanup
+```
+
+创建请求只允许 `task_id`、`plan_version`、`capability_id`、`profile`。调用者不能提交 container/image ID、mount、Docker 参数、shell/argv、tenant 或 run ID；额外字段统一返回 HTTP 422 与 `INVALID_REQUEST`。broker 从批准的 PlanStore bundle、capability catalog、ModelStore 和固定 profile 自行推导所有执行事实。
+
+启动命令：
+
+```powershell
+D:\dj\.envs\dsh-dj\python.exe -m data_juicer.tools.plan_flow.broker `
+  --workspace <absolute-workspace> `
+  --worker-root D:\dsh-worker `
+  --allow-capability <capability-id> `
+  --tenant-id <tenant> `
+  --host 127.0.0.1 `
+  --port 8765
+```
+
+`serve_broker` 只接受数值 loopback IP；`0.0.0.0`、局域网地址和主机名都会在 Uvicorn 启动前被拒绝为 `BROKER_LOOPBACK_REQUIRED`。本阶段没有把 broker 注册为 Windows 服务，验收进程已停止，不残留监听端口。
+
+### 11.2 身份、allowlist 与 profile
+
+PlanRunner 的 `run_r001` 是 task-local ID，不能直接作为 broker 的全局 URL identity。broker 因此生成 `run_<32hex>` 的公开 ID，并在 `D:\dsh-worker\broker-state\runs` 持久映射到 task-local run；HTTP 永不返回通用 handle 或 Docker backend ref。这不是改变 `RunHandle`，而是在更高层增加全局路由 identity。
+
+allowlist 存的是 capability ID；descriptor 必须是 Docker backend 且只包含不可变 `image_id`。正式 `DockerBackend` 再 inspect 该 ID，不接受请求端提供 tag。批准计划声明的 ModelArtifact 集合必须与 descriptor `model_refs` 完全一致，且 ModelStore 当前 aggregate hash 必须相同，否则在 backend start 前返回 `CAPABILITY_MODEL_MISMATCH`。
+
+固定 profile 已落地：
+
+```text
+local-tiny: 1 CPU, 2 GiB, 64 pids, 256 MiB tmpfs, 300 s
+local-cpu:  2 CPU, 8 GiB, 256 pids, 1 GiB tmpfs, 1800 s
+```
+
+profile timeout 被写进通用 RuntimeSpec/RunHandle deadline。`local-cpu` 在 `.start.lock` 内扫描持久 broker run 状态，进程重启后仍只允许一个 active run；请求端没有覆盖资源上限的字段。
+
+### 11.3 生命周期与真实验收
+
+cancel 通过 PlanRunner/ExecutionBackend seam 幂等执行；cleanup 只调用 backend 一次，在 broker record 与 run state 写入 `cleaned_at`，重复请求仍返回 `cleaned=true`。broker 响应只投影公开状态，不泄漏 container name/ID、image ID 或宿主路径。
+
+真实验收使用 `127.0.0.1:18765`、tenant `local-i`、`demo-text-signature-v2` 与 `local-tiny`：
+
+```text
+public run ID: run_25d624f04f9c470fabb97889f6ef7494
+plan hash: sha256:815748604fa9b783593d6f6c417dc142185b3c9c4543bb1c998e04de3691ea44
+image ID: sha256:87b81ce6a47536b31cb736b3d41b66cfd236ba2e39989b99831798808a188cba
+output signature: 1f1bc5ddc95edacf
+```
+
+夹带 `--privileged` 的请求得到 422/`INVALID_REQUEST`；合法请求在只读根、`network=none`、drop ALL capabilities 和 profile 资源限制下成功。停止并重新启动 broker 后，同一公开 run ID 仍查询为 succeeded；两次 cleanup 均成功，managed container 数为 0，输出保留。
+
+当前“重启恢复”依赖已落盘的 broker record、PlanRunner state 与 Docker private state。真正缺 broker record 的 orphan 主动 label 扫描尚未实现，必须留在后续完整故障矩阵，不能把普通重启恢复写成 orphan discovery。
+
+### 11.4 回归、环境与经验
+
+Plan Flow 回归为 `74 passed, 3 skipped`；Ruff、compileall、diff check、`pip check` 通过。阶段 I 把完整 `pip freeze` 原文分别保存为 before/after，两文件 SHA-256 均为 `eaf49368038d6fd020c4527352982cc39e3e6c11919bdde8c1dfa604414f1903`，135 行逐行相同；规范化 hash 均为 `db54d161ab6f0e1f95c2cb0f66e89c3d7138db5abe5a21994499f2ab9f10b1ec`。基础镜像 ID 仍为 `sha256:c881...76490`。
+
+不能靠猜的实现点：
+
+1. task-local run ID 不是全局 broker ID；混用会导致不同 task 的 `run_r001` 冲突。
+2. loopback 必须校验实际 bind address，不能只在文档里写“请使用 127.0.0.1”。
+3. `local-cpu` 并发门禁必须持有跨进程文件锁并读取持久状态，内存计数在 broker 重启后会失效。
+4. capability allowlist 不能只校验名字；还要固定 image ID 和 ModelArtifact hash。
+5. cleanup 幂等状态属于 broker/run state，不能依赖 Docker 容器是否还存在来猜。
+6. FastAPI 默认 422 结构不是稳定领域错误；HTTP adapter 必须转换为统一 `PlanFlowError` envelope。
+
+下一步按原规划进入完整隔离、故障、重启与 orphan 对账测试，此处不重复测试矩阵。

@@ -1,6 +1,6 @@
 # 当前 Windows 主机：Docker Worker 本机验证完整方案
 
-更新时间：2026-08-29
+更新时间：2026-08-30
 
 ## 1. 目的
 
@@ -594,9 +594,11 @@ models/fixture-v1/
 
 之后再接公开、许可清晰的小型 CPU 模型。SAM 3 和 BUFFALO 不应成为 ModelStore 的第一项基础测试。
 
-## 13. 阶段 H：缺失能力自动部署演练
+## 13. 阶段 H：两级缺失能力自动部署演练
 
-### H1. 先用安全 demo capability
+阶段 H 必须拆成两个明确且顺序执行的验收点。H1 只验证 capability 构建与注册链路；H2/H-model 在同一套 seam 上加入阶段 G 的 ModelArtifact。不要用一次 model-backed demo 同时承担两类验收，否则失败时无法判断问题属于 Builder/Runtime，还是 ModelStore/inference。
+
+### H1. 无模型 demo capability
 
 创建一个仓库内的 demo 自定义算子包：
 
@@ -617,7 +619,7 @@ tests/fixtures/capabilities/demo_image_stat/
 - 不访问模型；
 - 能故意生成一个依赖缺失场景。
 
-### H2. 演练流程
+H1 演练流程：
 
 ```text
 Agent 需求分析
@@ -639,14 +641,125 @@ preview run
 第二次请求直接复用，不再构建
 ```
 
-验收：
+H1 明确验收点：
+
+```text
+无模型 demo capability
+  → 验证“缺算子 → Builder → 新 Runtime → 注册 → 复用”
+```
 
 - 共享 venv 的 `pip freeze` 前后不变；
 - 基础镜像 ID 不变；
 - 派生镜像有独立 ID；
+- capability descriptor 固定 source hash、依赖 lock hash 和派生 image ID；
 - 构建失败不会影响现有 run；
 - 未批准 proposal 不能运行；
 - 第二次同样依赖得到相同环境 hash 或复用既有 digest。
+
+### H2 / H-model. tiny model-backed capability
+
+H1 通过后，再创建第二个独立 capability。它必须同时包含：
+
+```text
+新 Operator
+  + 新派生 Runtime
+  + 阶段 G 已发布 ModelArtifact
+  → 离线 CPU inference
+```
+
+建议使用 Google BERT-Tiny：
+
+```yaml
+artifact_id: google-bert-uncased-l2-h128-a2-rev-30b0a37
+source: https://huggingface.co/google/bert_uncased_L-2_H-128_A-2
+revision: 30b0a37ccaaa32f332884b96992754e246e48c5f
+architecture:
+  layers: 2
+  hidden_size: 128
+  attention_heads: 2
+license:
+  evidence: Apache-2.0
+  status: requires-explicit-test-approval
+runtime_files:
+  - config.json
+  - model.safetensors
+  - vocab.txt
+excluded_files:
+  - pytorch_model.bin
+  - flax_model.msgpack
+```
+
+选择理由与约束：
+
+- Google 官方模型仓库明确把 2/128 模型定位为受限计算资源下的小型 BERT，并声明小模型与源码同为 Apache-2.0；
+- Hugging Face 的 Google 官方 namespace 提供 `model.safetensors`，单份权重约 17.7 MB，适合本机 CPU 演练；
+- 只下载固定 revision 的 `config.json`、`model.safetensors` 和 `vocab.txt`，不下载整个约 53.3 MB、包含重复格式的仓库；
+- 禁止使用 pickle 格式的 `pytorch_model.bin`；实际文件 hash、总大小、许可审批人和审批时间必须由阶段 G ModelManifest/审批记录固化；
+- Builder 只把固定版本的推理依赖和新 Operator 放进派生 Runtime，模型不得 bake 进 image；
+- 构建阶段可按 allowlist 下载依赖，正式 preview/run 必须 `network=none`，模型通过 `/models/<artifact-id>` 只读挂载；
+- 原始 BERT 不是经过句向量任务微调的质量模型。H-model 只验收真实 inference、确定性和集成链路，不把 embedding 相似度当业务质量结论。
+
+建议 demo Operator contract：输入一条短文本，使用 `AutoTokenizer` 和 `AutoModel` 的本地路径、`local_files_only=True`、CPU/eval/no-grad，执行一次 forward；输出 `hidden_size=128`、token count、有限的 pooled-vector norm 和确定性 checksum，不在日志中打印完整 embedding。
+
+H-model 演练流程：
+
+```text
+Capability catalog 未找到 model-backed demo operator
+  ↓
+生成并人工批准 source/dependency/model proposal
+  ↓
+Model Installer 下载固定 revision 的 safetensors/config/vocab
+  ↓
+阶段 G ModelStore 校验并发布 ModelArtifact
+  ↓
+Builder 构建包含新 Operator 和固定推理依赖的新 Runtime
+  ↓
+import test + operator contract test + model mount contract test
+  ↓
+network=none 的 preview inference
+  ↓
+发布 capability descriptor（固定 image ID + model artifact hash）
+  ↓
+第二次请求复用同一 Runtime 和 ModelArtifact
+```
+
+H-model 明确验收点：
+
+```text
+tiny model-backed capability
+  → 验证“新 Operator + 新 Runtime + G ModelArtifact → inference”
+```
+
+- 未审批的模型许可、source revision、dependency lock 或 Operator source 任一项都不能进入 Builder/run；
+- 派生 Runtime ID 与基础镜像及 H1 Runtime 不同，模型文件不在任何 image layer 中；
+- preview 的 container entry 验证模型挂载只读，模型路径来自 `model-store://` 物化而非宿主路径；
+- 固定输入的两次推理得到 `hidden_size=128`、有限数值和相同 checksum；不同输入不能得到相同 checksum；
+- 模型 hash mismatch、缺文件和尝试联网分别得到稳定失败码，不能回退为在线 `from_pretrained(model_id)`；
+- cleanup 删除容器/work 后，Runtime 和 ModelArtifact 仍存在且可复核；
+- 第二次相同 capability 请求不重新下载模型、不重新构建镜像，复用同一 image ID 和 ModelArtifact hash；
+- 共享 venv、基础镜像 ID 和阶段 G tiny fixture 均保持不变。
+
+模型与许可事实来源：
+
+- [Google BERT 官方仓库](https://github.com/google-research/bert)：小模型表、计算资源定位及 Apache-2.0 声明；
+- [Google 官方 Hugging Face 模型页](https://huggingface.co/google/bert_uncased_L-2_H-128_A-2/tree/30b0a37ccaaa32f332884b96992754e246e48c5f)：固定 revision 的文件清单和 safetensors；
+- [Google BERT LICENSE](https://github.com/google-research/bert/blob/master/LICENSE)：许可正文。
+
+### H3. 2026-08-30 实施状态
+
+H1 与 H2 已完成真实 Docker 验收。当前有效 descriptor 是：
+
+```text
+H1 demo-text-signature-v2
+  image: sha256:87b81ce6a47536b31cb736b3d41b66cfd236ba2e39989b99831798808a188cba
+
+H2 demo-bert-feature-v3
+  image: sha256:25da6864fdb67b7a85bc827300db7bb0784923d14ba53cb2b9b5df2eb05ece67
+  model: sha256:e962e2ee0f9a03d84d04461e30a0fdac2a8a3c53351eb325442b9808a3407b5c
+```
+
+H2 固定输入两次 checksum 相同，不同输入 checksum 不同；provenance 为只读根、`network=none`，模型未 bake 入镜像，cleanup 后 ModelStore 仍可 verify。实现事实、旧调试 descriptor 的版本原因以及 freeze 审计缺口见
+[`local-windows-docker-worker-abcd-handoff.zh-CN.md`](./local-windows-docker-worker-abcd-handoff.zh-CN.md) 第 10 节。
 
 ## 14. 阶段 I：本机 Execution Broker
 
@@ -691,6 +804,23 @@ local-cpu:
 ```
 
 本机同时只允许一个 `local-cpu` run，避免拖垮 DSH/MCP。
+
+### I3. 2026-08-30 实施状态
+
+loopback Execution Broker 已实现并通过真实 HTTP + Docker 验收：
+
+```text
+module: data_juicer.tools.plan_flow.broker
+bind: 仅数值 loopback IP
+public run ID: run_<32hex>
+allowlist: capability ID → immutable Docker image ID
+profiles: local-tiny / local-cpu
+```
+
+创建请求只接受批准 Plan 引用、capability 和 profile；mount、Docker 参数、command、tenant、run ID 都不能由请求提供。模型集合及 aggregate hash 必须与 capability descriptor 一致。`local-cpu` 单并发门禁使用跨进程锁和持久 run 状态；cancel/cleanup 幂等。
+
+真实 `127.0.0.1` 运行在 broker 进程重启后用同一公开 run ID 恢复成功，cleanup 后无 managed container、无监听端口。当前恢复依赖已落盘 broker record；缺 record 的主动 Docker label orphan 扫描仍属于后续完整故障矩阵，不视为已经完成。事实与验收 hash 见
+[`local-windows-docker-worker-abcd-handoff.zh-CN.md`](./local-windows-docker-worker-abcd-handoff.zh-CN.md) 第 11 节。
 
 ## 15. 完整测试矩阵
 
@@ -744,7 +874,20 @@ local-cpu:
 - run 不能投毒模型；
 - 模型与容器生命周期独立。
 
-### 15.6 业务等价
+### 15.6 Capability Builder 与 model-backed inference
+
+- H1 未审批 proposal 不能构建或注册；
+- H1 构建无模型派生 Runtime，第二次请求复用同一 image ID；
+- H1 构建失败不改变基础镜像、共享 venv 或已注册 capability；
+- H-model 固定 Google BERT-Tiny revision，只接收 safetensors/config/vocab；
+- H-model 的 ModelArtifact hash 与 capability descriptor、run provenance 一致；
+- H-model Runtime 不包含模型文件，run 只读挂载阶段 G artifact；
+- `network=none` 且 `local_files_only=True` 的 CPU inference 成功；
+- 相同输入重复 inference 的 shape/checksum 稳定，不同输入 checksum 不同；
+- 缺模型、模型 hash 错误、依赖缺失和联网回退均结构化失败；
+- H-model 第二次请求同时复用 Runtime image ID 与 ModelArtifact hash。
+
+### 15.7 业务等价
 
 同一 Plan 分别运行：
 
@@ -826,10 +969,12 @@ cleanup.json
 6. 容器、work、tmp 和 secret 能按策略清理；
 7. Docker Desktop/broker/MCP 重启后无永久 orphan；
 8. tiny model 的 staging、校验、发布、只读复用通过；
-9. demo 缺失能力能构建派生镜像并复用；
-10. 未审批候选不能进入 run；
-11. 两次相同 Plan 使用同一 image/model hash 可重放；
-12. DSH Web 在 worker 压力测试时仍可用。
+9. H1 无模型缺失能力完成“Builder → 新 Runtime → 注册 → 复用”；
+10. H-model 完成“新 Operator + 新 Runtime + G ModelArtifact → 离线 inference”；
+11. H1/H-model 未审批候选均不能进入 build/run；
+12. H-model 第二次请求复用同一 image ID 和 ModelArtifact hash；
+13. 两次相同 Plan 使用同一 image/model hash 可重放；
+14. DSH Web 在 worker 压力测试时仍可用。
 
 ## 19. 本机之后如何迁移
 
@@ -861,7 +1006,9 @@ F. DockerBackend + lifecycle
   ↓
 G. tiny ModelStore
   ↓
-H. demo 缺失能力自动构建
+H1. 无模型 demo：缺算子 → Builder → 新 Runtime → 注册 → 复用
+  ↓
+H2/H-model. tiny model-backed capability：新 Operator + 新 Runtime + G ModelArtifact → inference
   ↓
 I. loopback execution broker
   ↓
