@@ -16,7 +16,7 @@
 
 ## 2. 当前结论
 
-阶段 A、B、C、D、E、F、G、H 以及 I 的 loopback execution broker 演练已经完成。完整隔离与故障矩阵已经开始执行，其中 broker record 缺失的 Docker orphan 对账、实际 HostConfig/cgroup、pids、只读根、tmpfs、断网、真实 OOM 和 deadline 终止验证已完成；下一步继续剩余文件/Secret 与业务等价项目。
+阶段 A、B、C、D、E、F、G、H 以及 I 的 loopback execution broker 演练已经完成。完整隔离与故障矩阵已经开始执行，其中 orphan 对账、资源/断网、真实 OOM/deadline、主动文件与模型篡改、未声明 Secret 隔离以及 Local/Docker 成功路径业务等价均已验证；下一步只继续尚未覆盖的 Secret 注入生命周期和业务失败语义等项目。
 
 当前已经具备：
 
@@ -875,3 +875,32 @@ deadline probe（父进程 + sleep 子进程）:
 两次 cleanup 后 `matrix-failure` managed container 为 0；临时 workspace、build context、run staging 和 tags 均已清理。机器可读证据在 `D:\dsh-worker\build-results\dj-plan-flow-failure-injection-local-v1\validation-summary.json`。
 
 不能靠猜的点：Dockerfile 的 `FROM sha256:<image-id>` 会被 BuildKit 当作 registry repository 名解析，并可能尝试联网，而不是自动引用本地 image ID。本次先 inspect `dj-plan-flow-cpu:local-v1` 必须仍等于固定基础 image ID，再以该本地 tag 作为 `FROM`，同时保持 `--pull=false --network=none`；不能因“写了 sha256”就假定构建是本地且不可变。
+
+## 15. 完整故障矩阵第四批结果：主动篡改与业务等价
+
+一次性 isolation probe 通过正常 PlanRunner/DockerBackend seam 运行，并引用已发布的 `fixture-tiny-model-v1`。容器不是只检查 mount flag，而是实际执行读、写和删除：
+
+```text
+input read:          succeeded
+bundle read:         succeeded
+model read:          succeeded
+input write:         EROFS
+bundle write:        EROFS
+model write/delete:  EROFS / EROFS
+rootfs write:        EROFS
+output/work/tmp:     succeeded / succeeded / succeeded
+host D:\dsh-worker:  not visible
+host D:\dj:          not visible
+```
+
+宿主进程设置了 `MATRIX_UNDECLARED_SECRET=sentinel-must-not-enter-container`，容器环境中该值为 null，probe image history 也不包含哨兵。当前系统尚未实现正式 `secret_ref` 挂载，因此这只证明“未声明 secret 不会随宿主环境泄漏”，不能冒充 secret mount 创建/撤销生命周期已经完成。
+
+ModelStore 在篡改前后 verify 得到相同 aggregate hash：`sha256:46150d027b041df4093eb3c50ad740480005d0960218d35b28f37cc968eb87ce`。probe image、容器、build context、workspace 和 run staging 已清理。
+
+同一个批准 Plan 使用 `whitespace_normalization_mapper`，先后由 LocalProcessBackend 与 DockerBackend 执行。两边 content hash 相同、状态均为 succeeded，输出记录数均为 2，逐条 JSON 业务记录完全相同：
+
+```json
+[{"text":"hello   world"},{"text":"line with   spaces"}]
+```
+
+该成功路径已加入 opt-in 真实 Docker 集成测试。机器证据位于 `D:\dsh-worker\build-results\dj-plan-flow-files-equivalence-local-v1\validation-summary.json`。本批没有自定义 artifact，也没有构造同一失败 Plan 比较两 backend 的失败码，因此 15.7 的 artifact/error 语义项仍不写成完成。

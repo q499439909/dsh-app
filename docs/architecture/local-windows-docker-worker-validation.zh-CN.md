@@ -851,6 +851,8 @@ profiles: local-tiny / local-cpu
 
 2026-08-30 第二批矩阵补证：实际 HostConfig 显示 rootfs readonly，input/bundle 的 `RW=false`，output/work 的 `RW=true`；容器内写根目录得到 `EROFS`，写 `/tmp` 成功。路径穿越、符号链接与结果逃逸仍由现有拒绝测试覆盖；本批没有把 HostConfig 的只读标志夸大为已主动篡改 input/bundle 文件。
 
+2026-08-30 第四批矩阵补证：真实 PlanRunner/DockerBackend probe 主动读取 input/bundle/model 成功，主动写 input/bundle/model、删除 model 和写 rootfs 均得到 `EROFS`；写 output/work/tmp 成功；容器内看不到宿主 `D:\dsh-worker` 或 `D:\dj`。ModelStore 篡改前后 aggregate hash 相同。证据位于 `D:\dsh-worker\build-results\dj-plan-flow-files-equivalence-local-v1\validation-summary.json`。
+
 ### 15.3 进程和资源
 
 - CPU 限制可观察；
@@ -876,6 +878,8 @@ profiles: local-tiny / local-cpu
 - 只有明确 API capability 才能申请受控网络，此项可留到 Linux worker 阶段。
 
 2026-08-30 第二批矩阵补证：真实容器 HostConfig 为 `NetworkMode=none`，容器内连接 `1.1.1.1:443` 得到 `ENETUNREACH`。本批没有 secret 注入，因此不对 secret 生命周期其余项目作新增完成声明。
+
+2026-08-30 第四批矩阵补证：宿主设置未声明的哨兵 secret 后，Docker run 内该环境变量仍为 null，派生 probe image history 不含哨兵。当前未实现正式 `secret_ref` mount，故“任务结束后 secret mount 消失”仍未验收，不能用“从未挂载”替代撤销生命周期证据。
 
 ### 15.5 ModelStore
 
@@ -918,6 +922,8 @@ DockerBackend
 - 错误语义。
 
 允许日志路径和运行时元数据不同，不允许业务输出无解释漂移。
+
+2026-08-30 第四批矩阵补证：同一批准 Plan、同一 content hash 和同一 `whitespace_normalization_mapper` 先后由 LocalProcessBackend 与 DockerBackend 真实执行，两边均 succeeded，输出记录数均为 2，逐条 JSON 业务记录完全相同。该成功路径已加入 `DJ_RUN_DOCKER_INTEGRATION=1` 的 opt-in 集成测试。自定义 artifact 和同一失败 Plan 的错误语义尚未在本批比较。证据位于 `D:\dsh-worker\build-results\dj-plan-flow-files-equivalence-local-v1\validation-summary.json`。
 
 ## 16. 日志与可观察性
 
