@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "artifacts": [
+    {
+      "package": "opencv-python-headless",
+      "version": "4.10.0.84",
+      "platform": "manylinux2014_x86_64",
+      "filename": "opencv_python_headless-4.10.0.84-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "sha256:377d08a7e48a1405b5e84afcbe4798464ce7ee17081c1c23619c8b398ff18295",
+      "size_bytes": 49858781,
+      "source": "https://files.pythonhosted.org/",
+      "license_status": "approved-for-test"
+    }
+  ]
+}

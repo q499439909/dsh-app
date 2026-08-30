@@ -1,0 +1,287 @@
+{
+  "ok": true,
+  "task_id": "task_b9c5a361099b",
+  "plan_version": "plan_v001",
+  "plan_content_hash": "sha256:63599a8893014966413ea86460ab89ff016a1d7de326655e291066af2419f29e",
+  "runtime_id": "runtime-91c7ca92061048a9d2bfcbe4",
+  "runtime_image_id": "sha256:f69126e812b7b3c33942c0333478b50e1f132d9684dd136703ffe43d373a62c3",
+  "dataset_snapshot": {
+    "schema_version": 1,
+    "snapshot_hash": "sha256:f8c369a745e564cd2ab3a1368f5180cff1872b3995ffd0a3842eb0bba0c12692",
+    "record_count": 500,
+    "copied_file_count": 500,
+    "total_bytes": 28357939,
+    "dataset_path": "/workspace/input/snapshot-0/dataset.jsonl"
+  },
+  "operator_artifacts": [
+    {
+      "schema_version": 1,
+      "artifact_id": "op-face-region-mask-v3",
+      "content_hash": "sha256:071c179e587ff36dcd5bbd3ccc350953324b208f5f86826e6faf5b64fd4a767c",
+      "source_hash": "sha256:4999d430d41576b59923d2f9c0ca6b5d0a100afdf3cf90c67660fe86e66a72cd",
+      "dependency_lock_hash": "sha256:dfcf2827fc4dc8c892bf893feeb382db7c4f420036e3b82295bceee2c86e26c2",
+      "operators": [
+        {
+          "name": "face_region_mask_mapper",
+          "import_module": "face_mask_operator",
+          "kind": "mapper",
+          "schema_hash": "sha256:bde58ef739005f958a93c4b864a9718cd57921378542fa70c729694195143aa0"
+        }
+      ],
+      "model_refs": [],
+      "created_at": "2026-08-30T17:06:45.135465+00:00"
+    },
+    {
+      "schema_version": 1,
+      "artifact_id": "op-masked-region-analysis-v2",
+      "content_hash": "sha256:41ecdee0e5a41de10008db7c3e5490cbceac8fe86e22052cf0ea2672be5d5809",
+      "source_hash": "sha256:cb0add6fe351680acf95530e529ece3bb265e9d3e7bf6ceb08dad8463bd0ddf8",
+      "dependency_lock_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "operators": [
+        {
+          "name": "masked_region_statistics_mapper",
+          "import_module": "region_stats_operator",
+          "kind": "mapper",
+          "schema_hash": "sha256:60337274722c956fc6d7a0b80a9d9576206590dcf6ad51d2f570934649232a4c"
+        },
+        {
+          "name": "stratified_quota_selector",
+          "import_module": "region_stats_operator",
+          "kind": "selector",
+          "schema_hash": "sha256:f8fefea8a60e3427c73a5f77314ed224550ef2d2f79d39d97dabdd316640e3a2"
+        },
+        {
+          "name": "file_artifact_materializer_mapper",
+          "import_module": "region_stats_operator",
+          "kind": "mapper",
+          "schema_hash": "sha256:2d4c28698f4c1c7b39076b7c8debdf4c004c726b84ac4f1bfb8d44987feda34a"
+        }
+      ],
+      "model_refs": [],
+      "created_at": "2026-08-30T17:06:45.135465+00:00"
+    }
+  ],
+  "selected_count": 30,
+  "strata": {
+    "small/dark": 5,
+    "medium/dark": 5,
+    "small/normal": 5,
+    "large/dark": 5,
+    "medium/normal": 5,
+    "large/normal": 5
+  },
+  "output_dir": "D:\\data\\face\\outputs\\produce-30-diverse-face-region-masks-balanced-by\\task_b9c5a361099b\\plan_v001\\run_r001",
+  "output_artifacts": {
+    "schema_version": 1,
+    "total_bytes": 93293,
+    "file_count": 32,
+    "files": [
+      {
+        "path": "masks/0021c6ab312a795b34583b66.png",
+        "sha256": "sha256:c6a121b8884d00fdfebfd702bca52d61f97fbb34d903e71fc1a36826aae2486f",
+        "size_bytes": 2393
+      },
+      {
+        "path": "masks/07454f394637cba50ad35148.png",
+        "sha256": "sha256:06f76df25a2cccc829961adde3cfb87bbcdd2c6a7bb222431924477db587743b",
+        "size_bytes": 2414
+      },
+      {
+        "path": "masks/09761eaa17205d909f2f28a5.png",
+        "sha256": "sha256:dd111d4314afaac0e8f593a2a656068712c65303c7fabd19d4007b132f26d854",
+        "size_bytes": 2293
+      },
+      {
+        "path": "masks/1214eb2b43106828b92e2369.png",
+        "sha256": "sha256:cbb744e7567319886277f183961de19d79a4a6ac26dc3c166f6d8c33025aac5a",
+        "size_bytes": 2498
+      },
+      {
+        "path": "masks/1400c6d86c6bcf4ae4a3242d.png",
+        "sha256": "sha256:38f913644bb2cd967f67ae060264c2ea72a0e78c499beec9171ec96ba07be19a",
+        "size_bytes": 2259
+      },
+      {
+        "path": "masks/346ddb0487c3fcaf7347ee53.png",
+        "sha256": "sha256:6eb5a4cac585e13fc33a4edd0e98fce8520f17faed3ba6a67e41057b00b4c740",
+        "size_bytes": 2427
+      },
+      {
+        "path": "masks/358de531e65564754309742f.png",
+        "sha256": "sha256:3a45b1ac389d3f5883b949ec13f2a0a5409db67aa1da2a3f713ea5d69fd465ff",
+        "size_bytes": 2332
+      },
+      {
+        "path": "masks/38668fbc228bb5dc7df0f686.png",
+        "sha256": "sha256:3c5404923652e39b76abce6d07ce2dc950456aa16002333f57c909783f2af6cc",
+        "size_bytes": 2345
+      },
+      {
+        "path": "masks/3b6ca37a644e37ce9f7a77d2.png",
+        "sha256": "sha256:2c5642b772b2ae80491aa3eb54f1c588d058286bd4b2fa7ff55ea8216240681a",
+        "size_bytes": 2588
+      },
+      {
+        "path": "masks/46d40a80578e0c3fc81847a9.png",
+        "sha256": "sha256:4dad03d8cb7d8ab4bd51f2e668218e50d6c48e5679b8671ea07ea20b6b189be8",
+        "size_bytes": 2390
+      },
+      {
+        "path": "masks/4fefbaa19bb60b4792bbcf9b.png",
+        "sha256": "sha256:da946a8ce2def616e35dc3e68ae3d8e143b1eaf056a261e5c25e298a571f4a2e",
+        "size_bytes": 2572
+      },
+      {
+        "path": "masks/649cc24b80c7f5ffbe871bad.png",
+        "sha256": "sha256:acf72c996c06a99c59e5a0b0d276f1a14cbc3054bc37f44fffe44bf484cb0f24",
+        "size_bytes": 2564
+      },
+      {
+        "path": "masks/6fe71474178396102aa548da.png",
+        "sha256": "sha256:7153e7d32e4dd486de4434af6c682fb9de41ad9c3d007b87fba45ed65bed6a6a",
+        "size_bytes": 2386
+      },
+      {
+        "path": "masks/7a24950ecb79b1d24f3699ce.png",
+        "sha256": "sha256:a63e518328d28d14b2656fba3ef03e498723ee8b326d1e2e3c2b2a9da84aa490",
+        "size_bytes": 2564
+      },
+      {
+        "path": "masks/84cfbe95223a83370a42ab41.png",
+        "sha256": "sha256:e38a6e5a8d3db3b580662f299cccfa8f778e14576b8b362afa886db251ba8563",
+        "size_bytes": 2458
+      },
+      {
+        "path": "masks/947d4ef978b7c029b1f88335.png",
+        "sha256": "sha256:7dce4578edd753b0a14e1f8ee53fd3b023d744ef771d4a8aa3d5f1c3ae5e1798",
+        "size_bytes": 2701
+      },
+      {
+        "path": "masks/9dd9745c5db08c75c267e9f3.png",
+        "sha256": "sha256:4823d5c9d4878099d740dab60f4ebd86e416bbc25d86452f9a23ca65303a523e",
+        "size_bytes": 2387
+      },
+      {
+        "path": "masks/a32c6ada6f509fc4c7e68556.png",
+        "sha256": "sha256:0ebc52c81b9ee1f741b3a641c2021949f8b8f12877d2a97467c47ceebf9443d6",
+        "size_bytes": 2356
+      },
+      {
+        "path": "masks/a38eff061b17283fdaf36dbe.png",
+        "sha256": "sha256:cb1e238909d7fdd258006e919977d883387ff705f8b45e780a4cb28e0f810790",
+        "size_bytes": 2301
+      },
+      {
+        "path": "masks/a3a26987547239f2b0496e58.png",
+        "sha256": "sha256:0c2e171d9d7f148d9f6edb82a45170ca363f9a20870e9752a74122a2e7f654d1",
+        "size_bytes": 2426
+      },
+      {
+        "path": "masks/a6500e789e6e1d021eaff657.png",
+        "sha256": "sha256:d3e1b6169a2280b1310e0814e8865b09d13689b29db996e4b5c276b44fae41a9",
+        "size_bytes": 2476
+      },
+      {
+        "path": "masks/a7b613e552e1eef4932044e3.png",
+        "sha256": "sha256:0b2d5fb797ed8f55cc6b8a3497a1c792cd2659542ed0a81cc6e96d38603b91b0",
+        "size_bytes": 2311
+      },
+      {
+        "path": "masks/c27e70450952f47a2dfb6bbd.png",
+        "sha256": "sha256:ba752523ef9d05b855b147812c60a3e8fa65e6573a41d3678cc7080d6517aec4",
+        "size_bytes": 2446
+      },
+      {
+        "path": "masks/d3f01d9049bb626fedc84da5.png",
+        "sha256": "sha256:b2ecbb2bf1d1e70755b8caace2e5e24471846c7b8ab9e10063682d71d3467bf5",
+        "size_bytes": 2528
+      },
+      {
+        "path": "masks/d6cb9b5bc5c075b272657e40.png",
+        "sha256": "sha256:900ff8d7be0e8733d0bb4861d0954f7d20d19253b5139a696285d6bd30ac286e",
+        "size_bytes": 2605
+      },
+      {
+        "path": "masks/eb86bf527723a2ac08f5f1c6.png",
+        "sha256": "sha256:a9cd032542ff3f7ece4af9c89bc0ed26d875265e67a001864b4bfe660747d0a0",
+        "size_bytes": 2443
+      },
+      {
+        "path": "masks/ebec2885b51cab30dfb97340.png",
+        "sha256": "sha256:08c08c6889defcd2413deecfe364491e4191f924d0606b95ab3bb8b2f9a090aa",
+        "size_bytes": 2469
+      },
+      {
+        "path": "masks/edc96dea188a6214501d2eab.png",
+        "sha256": "sha256:839b72eedc023f6fd3a43db44e794e494241b1fe2620a75a919908a0229febf7",
+        "size_bytes": 2526
+      },
+      {
+        "path": "masks/f3c81fa787445822477f1316.png",
+        "sha256": "sha256:fc57da571f7fd749cdb158a1c0a3a2a589a6a6abce2f67711b7ac79482c801c8",
+        "size_bytes": 2479
+      },
+      {
+        "path": "masks/ffc1b6bffa84ccdeabbf8307.png",
+        "sha256": "sha256:e76ca928f83e40ee821ecd6f0e996ca4babe68f2076dd382c5961ee075a12f07",
+        "size_bytes": 2510
+      },
+      {
+        "path": "result-manifest.json",
+        "sha256": "sha256:ccc7be790f0ee32436a636d96c6378d73ae19aa9468e7d5555ba64ef204d82e0",
+        "size_bytes": 5972
+      },
+      {
+        "path": "selected_faces.jsonl",
+        "sha256": "sha256:ad9282f917a5d8229141014c03ceb56092e7ed146cda3bfbcea8cf73df388388",
+        "size_bytes": 13874
+      }
+    ],
+    "content_hash": "sha256:b6a2ad29565911b569d6b2f2c72531c98208cea0087de8d917f8f924b9ea4c85"
+  },
+  "run": {
+    "content_hash": "sha256:63599a8893014966413ea86460ab89ff016a1d7de326655e291066af2419f29e",
+    "created_at": "2026-08-30T17:06:50.470440+00:00",
+    "handle": {
+      "backend": "docker",
+      "backend_ref": "41380cf591a24949a29e5d1fe9165f2a",
+      "created_at": "2026-08-30T17:06:50.470440+00:00",
+      "deadline": "2026-08-30T17:36:50.470440+00:00",
+      "run_id": "run_r001",
+      "schema_version": 1
+    },
+    "output_dir": "D:\\data\\face\\outputs\\produce-30-diverse-face-region-masks-balanced-by\\task_b9c5a361099b\\plan_v001\\run_r001",
+    "plan_version": "plan_v001",
+    "run_id": "run_r001",
+    "status": "succeeded",
+    "task_id": "task_b9c5a361099b",
+    "updated_at": "2026-08-30T17:07:48.213096+00:00",
+    "runtime_provenance": {
+      "schema_version": 1,
+      "backend": "docker",
+      "run_id": "run_r001",
+      "image_id": "sha256:f69126e812b7b3c33942c0333478b50e1f132d9684dd136703ffe43d373a62c3",
+      "container_id": "2f270a0d8d59371d56e549ed7fc1d89991c90f867b4a21e3315ed6db25c7a68b",
+      "container_name": "dj-run-41380cf591a24949a29e",
+      "sandbox": {
+        "read_only": true,
+        "network": "none",
+        "cap_drop": [
+          "ALL"
+        ],
+        "no_new_privileges": true
+      },
+      "resources": {
+        "cpus": 2,
+        "memory_bytes": 8589934592,
+        "pids_limit": 256,
+        "stop_grace_seconds": 10,
+        "tmpfs_bytes": 1073741824
+      },
+      "models": [],
+      "collected_at": "2026-08-30T17:07:48.137270+00:00"
+    },
+    "stdout_log": "D:\\data\\face\\.dj\\tasks\\task_b9c5a361099b\\runs\\run_r001\\logs\\stdout.log",
+    "stderr_log": "D:\\data\\face\\.dj\\tasks\\task_b9c5a361099b\\runs\\run_r001\\logs\\stderr.log"
+  }
+}
