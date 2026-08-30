@@ -16,7 +16,7 @@
 
 ## 2. 当前结论
 
-阶段 A、B、C、D、E、F、G、H 以及 I 的 loopback execution broker 演练已经完成。下一步是规划中的完整隔离、故障与 orphan 对账矩阵。
+阶段 A、B、C、D、E、F、G、H 以及 I 的 loopback execution broker 演练已经完成。完整隔离与故障矩阵已经开始执行，其中 broker record 缺失的 Docker orphan 对账、实际 HostConfig/cgroup、pids、只读根、tmpfs、断网、真实 OOM 和 deadline 终止验证已完成；下一步继续剩余文件/Secret 与业务等价项目。
 
 当前已经具备：
 
@@ -40,8 +40,9 @@
 - 只监听数值 loopback、只接收批准计划引用的 Execution Broker；
 - 固定本机 profile、capability/image allowlist、模型 hash 契约和 `local-cpu` 单并发门禁；
 - HTTP 创建/查询/取消/清理、进程重启恢复和统一错误结构。
+- 基于 managed/tenant labels、私有 backend state、allowlist image ID 和 profile limits 的 orphan 主动对账。
 
-尚未完成的是完整测试矩阵中的主动 Docker label orphan 扫描、压力/故障注入和 Windows 自启动部署；当前 broker 是可直接运行的 loopback 进程，不是已注册的 Windows 服务。Docker Adapter 当前支持本地 dataset、默认 executor、已发布本机模型，以及由 Capability Builder 烘焙并由 bootstrap 预注册算子的派生 Runtime。recipe 直接传 `custom_operator_paths`、postprocess 和非默认 executor 仍会显式拒绝，不会静默降级。
+尚未完成的是完整测试矩阵中其余压力/故障注入项目和 Windows 自启动部署；当前 broker 是可直接运行的 loopback 进程，不是已注册的 Windows 服务。Docker Adapter 当前支持本地 dataset、默认 executor、已发布本机模型，以及由 Capability Builder 烘焙并由 bootstrap 预注册算子的派生 Runtime。recipe 直接传 `custom_operator_paths`、postprocess 和非默认 executor 仍会显式拒绝，不会静默降级。
 
 ## 3. 接手时的代码和制品位置
 
@@ -774,11 +775,11 @@ output signature: 1f1bc5ddc95edacf
 
 夹带 `--privileged` 的请求得到 422/`INVALID_REQUEST`；合法请求在只读根、`network=none`、drop ALL capabilities 和 profile 资源限制下成功。停止并重新启动 broker 后，同一公开 run ID 仍查询为 succeeded；两次 cleanup 均成功，managed container 数为 0，输出保留。
 
-当前“重启恢复”依赖已落盘的 broker record、PlanRunner state 与 Docker private state。真正缺 broker record 的 orphan 主动 label 扫描尚未实现，必须留在后续完整故障矩阵，不能把普通重启恢复写成 orphan discovery。
+阶段 I 当时验证的“重启恢复”依赖已落盘的 broker record、PlanRunner state 与 Docker private state。broker record 真正缺失的 orphan 主动对账现已在完整故障矩阵首批工作中实现，见第 12 节；两类恢复证据仍应分开描述。
 
 ### 11.4 回归、环境与经验
 
-Plan Flow 回归为 `74 passed, 3 skipped`；Ruff、compileall、diff check、`pip check` 通过。阶段 I 把完整 `pip freeze` 原文分别保存为 before/after，两文件 SHA-256 均为 `eaf49368038d6fd020c4527352982cc39e3e6c11919bdde8c1dfa604414f1903`，135 行逐行相同；规范化 hash 均为 `db54d161ab6f0e1f95c2cb0f66e89c3d7138db5abe5a21994499f2ab9f10b1ec`。基础镜像 ID 仍为 `sha256:c881...76490`。
+阶段 I 当时的 Plan Flow 回归为 `74 passed, 3 skipped`。orphan 对账落地后回归为 `77 passed, 3 skipped`；Ruff、compileall、diff check、`pip check` 通过。阶段 I 把完整 `pip freeze` 原文分别保存为 before/after，两文件 SHA-256 均为 `eaf49368038d6fd020c4527352982cc39e3e6c11919bdde8c1dfa604414f1903`，135 行逐行相同；规范化 hash 均为 `db54d161ab6f0e1f95c2cb0f66e89c3d7138db5abe5a21994499f2ab9f10b1ec`。基础镜像 ID 仍为 `sha256:c881...76490`。
 
 不能靠猜的实现点：
 
@@ -789,4 +790,88 @@ Plan Flow 回归为 `74 passed, 3 skipped`；Ruff、compileall、diff check、`p
 5. cleanup 幂等状态属于 broker/run state，不能依赖 Docker 容器是否还存在来猜。
 6. FastAPI 默认 422 结构不是稳定领域错误；HTTP adapter 必须转换为统一 `PlanFlowError` envelope。
 
-下一步按原规划进入完整隔离、故障、重启与 orphan 对账测试，此处不重复测试矩阵。
+## 12. 完整故障矩阵首批结果：orphan 对账
+
+`ExecutionBroker.reconcile()` 与 broker app 启动过程现在会调用 backend-specific discovery。DockerBackend 只向上层返回 task、plan 和通用 `RunHandle`；`container_id`、`image_id` 仍保留在 Docker 私有状态中，没有重新泄漏进 broker API 或通用 handle。
+
+接管必须同时满足：容器有 `dj.managed=true` 和相同 `dj.tenant-id` label；Docker 私有记录属于当前 workspace/tenant；不可变 image ID 对应 allowlisted capability；资源 limits 与唯一 profile 完全相同；容器 labels、RuntimeSpec、PlanRunner run state 和通用 handle 彼此一致；计划模型集合及 hash 仍满足 capability contract。多个 capability/profile 都能匹配时不猜，直接不接管。已有 broker 映射不会重复生成公开 ID。
+
+真实 Docker tracer 刻意绕过 Broker，先由 PlanRunner + DockerBackend 启动 `demo-text-signature-v2`，制造“容器和 PlanRunner state 已存在、broker record 尚未写入”的崩溃窗口。随后新 Broker 成功接管：
+
+```text
+tenant:                    matrix-orphan
+public run ID:              run_08e0cc2f92de4c948a0e1cc9908d742a
+initial reconciled status:  running
+terminal status:            succeeded
+reconcile idempotent:       true
+managed containers after:   0
+```
+
+机器可读证据保存在 `D:\dsh-worker\build-results\dj-plan-flow-orphan-reconcile-local-v1\validation-summary.json`。临时 workspace、broker 映射、测试 run staging 和容器均已清理。
+
+本轮新发现且不能靠猜的坑：`docker ps --format {{.ID}}` 默认给 12 位短 ID，Docker 私有记录保存的是 64 位完整 ID，直接比较会静默漏掉所有真实 orphan。发现命令必须带 `--no-trunc`；该行为已有失败测试和真实 Docker tracer 双重锁定。异租户和未知镜像也有明确拒绝测试。
+
+下一步继续原规划 15.1–15.7 中尚缺真实故障注入证据的项目，不重复已经通过的 A–I 与本节验收。
+
+## 13. 完整故障矩阵第二批结果：资源与基础隔离
+
+本批没有新增可由请求控制的资源字段，也没有为了测试开放任意 command。Broker 创建正常 `demo-text-signature-v2` run 后，直接从 Docker Desktop system boundary 读取容器实际 HostConfig；另用同一不可变 capability image 做最小 cgroup/isolation probe，避免把“create argv 看起来正确”写成运行时已生效。
+
+Broker `local-tiny` 容器的实际事实为：
+
+```text
+user:              10001:10001
+readonly rootfs:   true
+network:           none
+cap drop:          ALL
+security opt:      no-new-privileges:true
+CPU:               NanoCpus=1000000000
+memory/swap:       2147483648 / 2147483648
+pids:              64
+/tmp:              rw,noexec,nosuid,size=268435456
+input,bundle RW:   false,false
+output,work RW:    true,true
+```
+
+容器内 probe 使用更小的 1 CPU、256 MiB、16 pids 测试 profile，以便低风险观察边界：
+
+```text
+cpu.max:                 100000 100000
+memory.max:              268435456
+pids.max/current:        16 / 16
+children started:        15
+next spawn:              EAGAIN (errno 11)
+rootfs write:            EROFS (errno 30)
+/tmp write:              succeeded
+external 1.1.1.1:443:    ENETUNREACH (errno 101)
+```
+
+Broker 业务 run 最终为 succeeded，cleanup 后该租户 managed container 为 0。机器可读证据在 `D:\dsh-worker\build-results\dj-plan-flow-resource-isolation-local-v1\validation-summary.json`。现有 opt-in 真实 Docker 回归也已加入实际 HostConfig 断言；本轮启用全部真实 DockerBackend 测试得到 `12 passed`。
+
+边界说明：本批证明 CPU/memory/pids cgroup 配额确实下发、pids 超限确实阻止创建进程，但没有把“memory.max 可见”冒充为 `RUN_OOM` 端到端映射；真实 OOM 和真实 deadline/子进程终止仍留给下一批。input/bundle 的只读属性已由实际 HostConfig 证明，本批没有在正常业务容器里主动篡改输入文件。
+
+## 14. 完整故障矩阵第三批结果：OOM 与 deadline
+
+为避免污染正式 capability，本批从已核对的基础镜像 ID 离线构建两个一次性 probe image。它们仍由正常 `PlanRunner → DockerBackend` seam 启动，使用 1 CPU、128 MiB、32 pids 和 1 秒 stop grace；请求端没有获得任意 command 或资源覆盖能力。验收后两个 probe image 均已删除。
+
+```text
+OOM probe:
+  runner status:       failed
+  error_code:          RUN_OOM
+  exit_code:           137
+  Docker OOMKilled:    true
+  timed_out:           false
+
+deadline probe（父进程 + sleep 子进程）:
+  timeout:             2 seconds
+  runner status:       failed
+  error_code:          RUN_TIMED_OUT
+  exit_code:           137
+  Docker OOMKilled:    false
+  timed_out:           true
+  container PID after: 0
+```
+
+两次 cleanup 后 `matrix-failure` managed container 为 0；临时 workspace、build context、run staging 和 tags 均已清理。机器可读证据在 `D:\dsh-worker\build-results\dj-plan-flow-failure-injection-local-v1\validation-summary.json`。
+
+不能靠猜的点：Dockerfile 的 `FROM sha256:<image-id>` 会被 BuildKit 当作 registry repository 名解析，并可能尝试联网，而不是自动引用本地 image ID。本次先 inspect `dj-plan-flow-cpu:local-v1` 必须仍等于固定基础 image ID，再以该本地 tag 作为 `FROM`，同时保持 `--pull=false --network=none`；不能因“写了 sha256”就假定构建是本地且不可变。

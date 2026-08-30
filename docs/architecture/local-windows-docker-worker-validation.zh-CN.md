@@ -819,8 +819,8 @@ profiles: local-tiny / local-cpu
 
 创建请求只接受批准 Plan 引用、capability 和 profile；mount、Docker 参数、command、tenant、run ID 都不能由请求提供。模型集合及 aggregate hash 必须与 capability descriptor 一致。`local-cpu` 单并发门禁使用跨进程锁和持久 run 状态；cancel/cleanup 幂等。
 
-真实 `127.0.0.1` 运行在 broker 进程重启后用同一公开 run ID 恢复成功，cleanup 后无 managed container、无监听端口。当前恢复依赖已落盘 broker record；缺 record 的主动 Docker label orphan 扫描仍属于后续完整故障矩阵，不视为已经完成。事实与验收 hash 见
-[`local-windows-docker-worker-abcd-handoff.zh-CN.md`](./local-windows-docker-worker-abcd-handoff.zh-CN.md) 第 11 节。
+真实 `127.0.0.1` 运行在 broker 进程重启后用同一公开 run ID 恢复成功，cleanup 后无 managed container、无监听端口。阶段 I 的该次恢复依赖已落盘 broker record；缺 record 的主动 Docker label orphan 对账随后已在完整故障矩阵首批工作中完成。两类恢复的事实与验收证据见
+[`local-windows-docker-worker-abcd-handoff.zh-CN.md`](./local-windows-docker-worker-abcd-handoff.zh-CN.md) 第 11、12 节。
 
 ## 15. 完整测试矩阵
 
@@ -832,6 +832,8 @@ profiles: local-tiny / local-cpu
 - 非 root 用户；
 - 镜像不包含 `dj-plan-flow.env`、API key、用户数据；
 - image inspect 能得到固定 ID。
+
+2026-08-30 第二批矩阵补证：Broker 创建的真实容器以 `10001:10001` 运行；不可变 capability image ID 和实际 HostConfig 已从 Docker Desktop inspect 读取。其余构建项沿用阶段 C/H 的既有证据。
 
 ### 15.2 文件隔离
 
@@ -847,6 +849,8 @@ profiles: local-tiny / local-cpu
 - 引用 `..` 或符号链接逃逸失败；
 - 读取 `D:\dj` 或其他 run 失败。
 
+2026-08-30 第二批矩阵补证：实际 HostConfig 显示 rootfs readonly，input/bundle 的 `RW=false`，output/work 的 `RW=true`；容器内写根目录得到 `EROFS`，写 `/tmp` 成功。路径穿越、符号链接与结果逃逸仍由现有拒绝测试覆盖；本批没有把 HostConfig 的只读标志夸大为已主动篡改 input/bundle 文件。
+
 ### 15.3 进程和资源
 
 - CPU 限制可观察；
@@ -857,6 +861,12 @@ profiles: local-tiny / local-cpu
 - DockerBackend 重启可恢复 inspect；
 - broker 重启可发现 orphan。
 
+2026-08-30 实施状态：最后一项已完成单元拒绝矩阵和真实 Docker tracer。Broker 启动时对账 managed + tenant labels，再与当前 workspace 的 Docker 私有状态、不可变 allowlist image ID、唯一 profile limits、RuntimeSpec 和 PlanRunner run state 交叉验证；异租户、未知镜像、歧义匹配均不接管。真实 tracer 从缺失 broker record 的 running 容器恢复到 succeeded，重复对账不重复建映射，cleanup 后该租户容器为 0。Docker 枚举必须使用 `docker ps -a --no-trunc`，否则 12 位短 ID 无法与私有状态中的 64 位 container ID 相等。证据位于 `D:\dsh-worker\build-results\dj-plan-flow-orphan-reconcile-local-v1\validation-summary.json`。
+
+2026-08-30 第二批矩阵补证：Broker `local-tiny` 的实际 HostConfig 为 1 CPU、2 GiB memory/swap、64 pids。独立低风险 probe 在容器内读取到 `cpu.max=100000 100000`、`memory.max=268435456`、`pids.max=16`；启动 15 个子进程后 `pids.current=16`，下一次 spawn 得到 `EAGAIN`。证据位于 `D:\dsh-worker\build-results\dj-plan-flow-resource-isolation-local-v1\validation-summary.json`。
+
+2026-08-30 第三批矩阵补证：一次性离线派生 probe image 通过正常 PlanRunner/DockerBackend seam 运行。128 MiB probe 被真实 OOM kill，得到 exit 137、`OOMKilled=true` 和 `RUN_OOM`；含父子进程的 probe 在 2 秒 deadline 后被停止，得到 exit 137、`timed_out=true`、`RUN_TIMED_OUT`，停止后容器 PID 为 0。cleanup 后无该租户容器，临时镜像已删除。证据位于 `D:\dsh-worker\build-results\dj-plan-flow-failure-injection-local-v1\validation-summary.json`。
+
 ### 15.4 网络和 Secret
 
 - 默认 DNS/HTTP 访问失败；
@@ -864,6 +874,8 @@ profiles: local-tiny / local-cpu
 - secret 不进入 Plan、image history、stdout/stderr；
 - 测试任务结束 secret mount 消失；
 - 只有明确 API capability 才能申请受控网络，此项可留到 Linux worker 阶段。
+
+2026-08-30 第二批矩阵补证：真实容器 HostConfig 为 `NetworkMode=none`，容器内连接 `1.1.1.1:443` 得到 `ENETUNREACH`。本批没有 secret 注入，因此不对 secret 生命周期其余项目作新增完成声明。
 
 ### 15.5 ModelStore
 
