@@ -1,0 +1,10 @@
+{"id":"001","text":"  Hello Builder  ","lang":"en","group":"trim-en"}
+{"id":"002","text":"Hello Builder","lang":"en","group":"trim-en"}
+{"id":"003","text":"  Ｈｅｌｌｏ　Ｂｕｉｌｄｅｒ  ","lang":"en","group":"nfkc-fullwidth"}
+{"id":"004","text":"Hello Builder","lang":"en","group":"nfkc-fullwidth"}
+{"id":"005","text":"  Café  ","lang":"fr","group":"nfkc-combining"}
+{"id":"006","text":"  Café  ","lang":"fr","group":"nfkc-combining"}
+{"id":"007","text":"  数据清洗测试  ","lang":"zh","group":"trim-zh"}
+{"id":"008","text":"数据清洗测试","lang":"zh","group":"trim-zh"}
+{"id":"009","text":"ＡＢＣ１２３","lang":"mixed","group":"nfkc-alnum"}
+{"id":"010","text":"ABC123","lang":"mixed","group":"nfkc-alnum"}

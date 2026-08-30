@@ -19,6 +19,8 @@ user-invocable: true
 7. 达到 `requirement_ready` 后，向用户展示结构化需求摘要、输入概况、未决的可探索事实和可判定验收标准，并请求 `确认需求并开始能力检索`、`修改需求` 或 `取消任务`。`ask_user_question` 可用时必须调用；不可用时使用简明文本。原始请求和一般附和都不算确认。
 8. 用户确认后，保留完整的 `requirement_ready` TaskSpec 作为会话内交接契约，然后调用 `skill` 工具加载 `data-juicer-plan-flow-zh`。后置 Skill 已加载时不要重复加载，直接按交接契约继续。
 
+在第 5 和第 7 步需要弹窗时，先把原因、输入概况、TaskSpec、验收标准和其他审查材料写在普通 assistant 回复中；`ask_user_question` 仅保留一句必须决策的问题、简短选项 label，以及每个选项最多一句直接影响说明。不得把 TaskSpec、长摘要、证据列表或 Markdown 章节放入弹窗。
+
 需要详细字段、成熟度条件或提问边界时，按需读取 [TaskSpec 与需求契约](references/task-spec.md)。普通任务不必全文展开该 reference。
 
 ## 阶段门禁

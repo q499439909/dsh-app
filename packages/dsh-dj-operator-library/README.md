@@ -6,6 +6,11 @@ cards, and an in-panel detail page with parameter metadata. The Host half
 proxies catalog and detail requests through same-origin DSH routes; the Client
 half registers a sidebar action and fills `shell.auxiliary`.
 
+The UI prefers the backend's checked-in `zh-CN` presentation metadata: Chinese
+operator and parameter names are shown above their immutable English registry
+identifiers, Chinese summaries are searchable alongside the English originals,
+and untranslated future operators remain visible with a pending badge.
+
 ## Configuration
 
 ```yaml

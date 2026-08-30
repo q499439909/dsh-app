@@ -26,6 +26,15 @@ The MCP server has no independent business workspace. Its source directory and p
 
 `mcp__dj__preview_plan` is a non-executing preflight summary. It does not replace validation or approval.
 
+## Interaction Presentation Contract
+
+When a user decision is required, separate the review material from the decision control:
+
+- First present the complete requirements summary, proposal, capability evidence or gap, Plan, diff, risks, and acceptance mapping in an ordinary assistant response.
+- Then call `ask_user_question`. Its `question` must be one short sentence stating only the decision the user must make; do not copy the report, Plan, evidence list, or Markdown sections into the popup.
+- Keep option labels short. Each option description may contain at most one sentence explaining the direct impact or tradeoff. The question may include a task id, plan version, or `content_hash` when needed to bind an approval to the exact artifact.
+- Do not call `ask_user_question` when no user choice is required.
+
 ## Plan Contract
 
 Keep the human-facing plan in this shape:

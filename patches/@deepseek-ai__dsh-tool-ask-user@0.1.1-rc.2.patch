@@ -1,0 +1,96 @@
+diff --git a/README.md b/README.md
+index bf2ba369fca36c462c6155ed2354ab3d0e930dd0..f256a8ad26ec743e338bd71561fcaeff58ce39e9 100644
+--- a/README.md
++++ b/README.md
+@@ -15,6 +15,8 @@ Model-facing `ask_user_question` tool over `ctx.userQuestions`. It lets the mode
+ - `options` — optional choices with `label` and `description`. If recommending a choice, put it first and append `(Recommended)` to that label.
+ - `multi_select` — whether that question may return more than one selected option.
+ 
++Review reports, proposals, Plans, evidence, and other substantial context belong in an ordinary assistant response before the tool call. The popup carries only the decision question and short choices: `header` is limited to 80 characters, `question` to 240, option `label` to 80, and option `description` to 160; all of these fields must be single-line text.
++
+ The tool calls `ctx.userQuestions.ask()` and returns canonical `{ answers: [{ id, selected, custom? }] }`. `selected` contains option labels; `custom` carries a free-form answer, supplementing `selected` for a multi-select question and overriding it for a single-select question. The Native renderer preserves the compact JSON text shape `{ "answers": [{ "id": "...", "selected": ["..."], "custom": "..." }] }`.
+ 
+ ## Role
+diff --git a/README.zh.md b/README.zh.md
+index 067235d84d70d2f3278fd39f5c01f130373d3ac2..096db70a8f1b39881ee522fd9fa98cded61743f9 100644
+--- a/README.zh.md
++++ b/README.zh.md
+@@ -15,6 +15,8 @@
+ - `options`：可选选项，包含 `label` 和 `description`。如需推荐某个选项，请将其置于首位，并在该标签末尾追加 `(Recommended)`。
+ - `multi_select`：该问题是否可以返回多个选中的选项。
+ 
++审查报告、方案、Plan、证据和其他大段上下文应先作为普通 assistant 回复发出。弹窗只承载决策问题和简短选项：`header` 不超过 80 字符，`question` 不超过 240 字符，选项 `label` 不超过 80 字符，`description` 不超过 160 字符；这些字段均必须使用单行文本。
++
+ 工具调用 `ctx.userQuestions.ask()`，并返回规范的 `{ answers: [{ id, selected, custom? }] }`。`selected` 包含选项标签；`custom` 携带自由填写的回答，对于多选题会补充 `selected`，对于单选题则会覆盖它。Native 渲染器会保留紧凑的 JSON 文本形式 `{ "answers": [{ "id": "...", "selected": ["..."], "custom": "..." }] }`。
+ 
+ ## 职责
+diff --git a/lib/index.js b/lib/index.js
+index c842f22536062080a6ecea023bc8325c4dab7eff..b4a7d195e6fd76b982758c2a2027dc22d3e7c243 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -10,7 +10,28 @@ import "@deepseek-ai/dsh-user-questions";
+ */
+ const name = "tool-ask-user";
+ const inject = ["tools", "userQuestions"];
+-const description = "Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer.";
++const description = "Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Put reports, plans, evidence, and other review material in the assistant response before this call; send only the decision question and short choices here. Send one or more questions, each with a stable id that will be echoed in the answer.";
++const MAX_HEADER_CHARS = 80;
++const MAX_QUESTION_CHARS = 240;
++const MAX_OPTION_LABEL_CHARS = 80;
++const MAX_OPTION_DESCRIPTION_CHARS = 160;
++function assertPopupText(value, path, maxChars, singleLine) {
++	if (value === void 0) return;
++	if (value.length > maxChars) throw new Error(`${path} exceeds ${maxChars} characters. Put supporting detail in the assistant response and keep the popup focused on the decision.`);
++	if (singleLine && /[\r\n]/.test(value)) throw new Error(`${path} must be a single line. Put reports, plans, evidence, and other review material in the assistant response.`);
++}
++function validatePopupQuestions(questions) {
++	questions.forEach((question, questionIndex) => {
++		const prefix = `questions[${questionIndex}]`;
++		assertPopupText(question.header, `${prefix}.header`, MAX_HEADER_CHARS, true);
++		assertPopupText(question.question, `${prefix}.question`, MAX_QUESTION_CHARS, true);
++		question.options?.forEach((option, optionIndex) => {
++			const optionPrefix = `${prefix}.options[${optionIndex}]`;
++			assertPopupText(option.label, `${optionPrefix}.label`, MAX_OPTION_LABEL_CHARS, true);
++			assertPopupText(option.description, `${optionPrefix}.description`, MAX_OPTION_DESCRIPTION_CHARS, true);
++		});
++	});
++}
+ function apply(ctx) {
+ 	ctx.tools.register(defineTool({
+ 		name: "ask_user_question",
+@@ -31,11 +52,11 @@ function apply(ctx) {
+ 					question: {
+ 						type: "string",
+ 						required: true,
+-						description: "The specific question to ask the user."
++						description: "One short, single-line decision question (maximum 240 characters). Put supporting reports, plans, evidence, and review detail in the assistant response before this call."
+ 					},
+ 					header: {
+ 						type: "string",
+-						description: "Optional short heading for the question, such as \"Confirm\" or \"Choose Mode\"."
++						description: "Optional single-line heading of at most 80 characters, such as \"Confirm\" or \"Choose Mode\"."
+ 					},
+ 					options: {
+ 						type: "array",
+@@ -47,11 +68,11 @@ function apply(ctx) {
+ 								label: {
+ 									type: "string",
+ 									required: true,
+-									description: "Short user-facing option label."
++									description: "Short, single-line user-facing option label of at most 80 characters."
+ 								},
+ 								description: {
+ 									type: "string",
+-									description: "One sentence explaining the tradeoff or impact."
++									description: "At most one short, single-line sentence (maximum 160 characters) explaining the direct tradeoff or impact."
+ 								}
+ 							}
+ 						}
+@@ -94,6 +115,7 @@ function apply(ctx) {
+ 			}]
+ 		},
+ 		async execute(args, exec) {
++			validatePopupQuestions(args.questions);
+ 			return { answers: (await ctx.userQuestions.ask({
+ 				questions: args.questions.map((question) => ({
+ 					id: question.id,

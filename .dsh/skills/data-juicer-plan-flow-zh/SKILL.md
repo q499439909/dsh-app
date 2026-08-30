@@ -33,6 +33,15 @@ MCP 服务器没有独立业务工作区。源码目录和进程 cwd 只是实�
 
 `mcp__dj__preview_plan` 只提供不执行数据的预检摘要，不能代替校验或批准。
 
+## 交互呈现契约
+
+需要用户决策时，把“审查材料”和“决策控件”分开：
+
+- 先在普通 assistant 回复中展示需求摘要、候选方案、能力证据、capability gap、Plan、diff、风险和验收映射等完整审查内容。
+- 然后调用 `ask_user_question`；弹窗的 `question` 只写一句需要用户作出的决策，不得复制前述报告、Plan、证据列表或 Markdown 章节。
+- 选项使用简短 label；`description` 最多用一句话说明该选择的直接影响或取舍。为精确绑定审批对象，可在问题中保留必需的 task id、plan version 或 `content_hash`。
+- 若没有需要用户选择的事项，不调用 `ask_user_question`。
+
 ## Plan 约定
 
 ```yaml
