@@ -81,9 +81,9 @@ window.__ModuleLoader__.load({
         if(name.endsWith("run_plan")||name.endsWith("get_run"))return{...context.state,runs:[...context.state.runs,{seq:match.event.seq,value}]};
         return context.state;
       },
-      buildLocationData:(context,scope)=>scope!=="turn"||context.state===undefined?null:{kind:"turn",turn:context.state.turn,key:"djPlans",value:{plans:context.state.plans,runs:context.state.runs}}
+      buildLocationData:(context,scope)=>scope!=="turn"||context.state===undefined?null:{kind:"turn",turn:context.state.turn,key:"dj-plans",value:{plans:context.state.plans,runs:context.state.runs}}
     };
-    function selectPlanData(owner){const data=owner.turn.data.get("djPlans");if(!data)return null;const ps=(data.plans||[]).filter(x=>x.seq<=owner.seq);const rs=(data.runs||[]).filter(x=>x.seq<=owner.seq);return ps.length||rs.length?{plans:ps,runs:rs}:null}
+    function selectPlanData(owner){const data=owner.turn.data.get("dj-plans");if(!data)return null;const ps=(data.plans||[]).filter(x=>x.seq<=owner.seq);const rs=(data.runs||[]).filter(x=>x.seq<=owner.seq);return ps.length||rs.length?{plans:ps,runs:rs}:null}
 
     function PlanCard({planRef,sessionId,t,onAction,onClose}){
       const[busy,setBusy]=React.useState(""),[error,setError]=React.useState("");

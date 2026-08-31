@@ -99,3 +99,11 @@ test("keeps the latest plan scoped to the active conversation", () => {
   clientModule.planSessionState.setActiveSession("session-empty");
   assert.equal(clientModule.planSessionState.activePlan(), null);
 });
+
+test("publishes location data under the projection definition's owned kind", () => {
+  const location = clientModule.projectionDefinition.buildLocationData({
+    state: { turn: 1, plans: [], runs: [] },
+  }, "turn");
+
+  assert.equal(location.key, clientModule.projectionDefinition.kind);
+});
