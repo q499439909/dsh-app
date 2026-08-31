@@ -2,6 +2,8 @@
 dj-plan-flow.env
 dsh-auth.env
 .dsh/auth.sqlite*
+.dsh/datasets.sqlite*
+.dsh/dj-internal-token
 
 # Installed dependencies and local runtime artifacts.
 node_modules/

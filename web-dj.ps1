@@ -19,10 +19,13 @@ $authEnvFile = Join-Path $dshRoot 'dsh-auth.env'
 $operatorPluginSource = Join-Path $dshRoot 'packages\dsh-dj-operator-library'
 $planPluginSource = Join-Path $dshRoot 'packages\dsh-dj-plan-explorer'
 $authPluginSource = Join-Path $dshRoot 'packages\dsh-user-auth'
+$datasetPluginSource = Join-Path $dshRoot 'packages\dsh-dj-datasets'
+$internalTokenPath = Join-Path $dshRoot '.dsh\dj-internal-token'
 $dshProfileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\profiles\web'
 $operatorPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\operator-library'
 $planPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\plan-explorer'
 $authPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\user-auth'
+$datasetPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\datasets'
 
 function Read-DotEnv {
     param([string]$Path)
@@ -72,6 +75,9 @@ if (-not (Test-Path -LiteralPath $planPluginSource -PathType Container)) {
 if (-not (Test-Path -LiteralPath $authPluginSource -PathType Container)) {
     throw "Cannot find the DSH user auth plugin: $authPluginSource"
 }
+if (-not (Test-Path -LiteralPath $datasetPluginSource -PathType Container)) {
+    throw "Cannot find the DSH result center plugin: $datasetPluginSource"
+}
 $operatorPluginParent = Split-Path -Parent $operatorPluginLink
 New-Item -ItemType Directory -Force -Path $operatorPluginParent | Out-Null
 if (Test-Path -LiteralPath $operatorPluginLink) {
@@ -101,7 +107,32 @@ if (Test-Path -LiteralPath $authPluginLink) {
 } else {
     New-Item -ItemType Junction -Path $authPluginLink -Target $authPluginSource | Out-Null
 }
+if (Test-Path -LiteralPath $datasetPluginLink) {
+    $existingDatasetLink = Get-Item -LiteralPath $datasetPluginLink -Force
+    $resolvedDatasetTarget = @($existingDatasetLink.Target | ForEach-Object { [System.IO.Path]::GetFullPath([string]$_) })
+    if ($existingDatasetLink.LinkType -ne 'Junction' -or $resolvedDatasetTarget -notcontains [System.IO.Path]::GetFullPath($datasetPluginSource)) {
+        throw "The DSH profile already contains a different @dsh-dj/datasets entry: $datasetPluginLink"
+    }
+} else {
+    New-Item -ItemType Junction -Path $datasetPluginLink -Target $datasetPluginSource | Out-Null
+}
 New-Item -ItemType Directory -Force -Path $mcpTempDir | Out-Null
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $internalTokenPath) | Out-Null
+if (-not (Test-Path -LiteralPath $internalTokenPath -PathType Leaf)) {
+    $tokenBytes = New-Object byte[] 32
+    $tokenGenerator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $tokenGenerator.GetBytes($tokenBytes)
+    } finally {
+        $tokenGenerator.Dispose()
+    }
+    [System.IO.File]::WriteAllText($internalTokenPath, [Convert]::ToBase64String($tokenBytes))
+}
+$internalToken = [System.IO.File]::ReadAllText($internalTokenPath).Trim()
+if ($internalToken.Length -lt 32) {
+    throw "The DSH/Data-Juicer internal token is invalid: $internalTokenPath"
+}
+[Environment]::SetEnvironmentVariable('DSH_DJ_INTERNAL_TOKEN', $internalToken, 'Process')
 $authEnvironment = Read-DotEnv -Path $authEnvFile
 if (-not $authEnvironment.ContainsKey('DSH_REGISTRATION_INVITE_HASH')) {
     throw "Missing DSH_REGISTRATION_INVITE_HASH in $authEnvFile. Generate it with the user-auth helper before starting DSH Web."
@@ -230,6 +261,7 @@ if (-not (Test-TcpPort -TargetPort $McpPort)) {
         PYTHONUTF8 = '1'
         PYTHONIOENCODING = 'utf-8'
         DJ_PLAN_FLOW_CONFIG_FILE = $mcpEnvFile
+        DSH_DJ_INTERNAL_TOKEN = $internalToken
     }
     $allowedMcpEnvironmentNames = @(
         'OPENAI_API_KEY',

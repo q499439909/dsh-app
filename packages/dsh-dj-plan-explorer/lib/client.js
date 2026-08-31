@@ -151,12 +151,18 @@ window.__ModuleLoader__.load({
       return h("section",{className:"djPlanRoot","aria-hidden":width===0},h("header",{className:"djPlanHeader"},h("div",{className:"djPlanTitleWrap"},h("div",{className:"djPlanTitle"},data?.plan?.user_intent||planRef.title),h("div",{className:"djPlanVersion"},planRef.plan_version)),h("span",{className:"djPlanSpacer"}),h("button",{type:"button",className:"djPlanIconButton",title:maximized?t("restore"):t("maximize"),onClick:toggleMaximized},maximized?"◲":"⛶"),h("button",{type:"button",className:"djPlanIconButton",title:t("close"),onClick:close},"×")),h("nav",{className:"djPlanTabs"},...[["flow","arrangement"],["plan","fullPlan"],["detail","detail"]].map(([id,label])=>h("button",{type:"button",className:"djPlanTab","data-active":tab===id,onClick:()=>setTab(id),key:id},t(label)))),h("div",{className:"djPlanBody"},body),h("footer",{className:"djPlanFooter"},h("button",{type:"button",className:"djPlanButton","data-primary":true,onClick:()=>action("create")},t("create")),h("button",{type:"button",className:"djPlanButton",onClick:()=>action("adjust")},t("adjust"))))
     }
 
-    function AuxiliaryHost({width,maximized,t,operatorT,close,toggleMaximized,open}){
+    function AuxiliaryHost({width,maximized,t,operatorT,resultT,close,toggleMaximized,open}){
       const[page,setPage]=React.useState({kind:"operator-library"});
       const[,operatorReady]=React.useReducer(x=>x+1,0);
+      const[,resultReady]=React.useReducer(x=>x+1,0);
       React.useEffect(()=>{const onOpen=event=>{const next=event.detail;setPlanPanelOpen(next?.kind==="plan");if(next?.kind==="plan"&&next.planRef)registerActivePlan(next.planRef);setPage(next);open()};window.addEventListener("dsh-dj-open-auxiliary",onOpen);return()=>window.removeEventListener("dsh-dj-open-auxiliary",onOpen)},[open]);
       React.useEffect(()=>{window.addEventListener("dsh-dj-operator-ready",operatorReady);return()=>window.removeEventListener("dsh-dj-operator-ready",operatorReady)},[]);
+      React.useEffect(()=>{window.addEventListener("dsh-dj-results-ready",resultReady);return()=>window.removeEventListener("dsh-dj-results-ready",resultReady)},[]);
       if(page?.kind==="plan"&&page.planRef)return h(PlanExplorer,{planRef:page.planRef,width,maximized,t,close,toggleMaximized});
+      if(page?.kind==="datasets"){
+        const ResultCenter=window.__dshDjResultCenter;
+        return ResultCenter?h(ResultCenter,{width,maximized,t:resultT,close,toggleMaximized,initialDatasetId:page.datasetId}):h("div",{className:"djPlanState"},"Result center is unavailable");
+      }
       const OperatorLibrary=window.__dshDjOperatorLibrary;
       return OperatorLibrary?h(OperatorLibrary,{width,maximized,t:operatorT,close,toggleMaximized}):h("div",{className:"djPlanState"},"Operator library is unavailable");
     }
@@ -165,12 +171,12 @@ window.__ModuleLoader__.load({
     function apply(ctx){
       ctx.conversationEvents.register(projectionDefinition);
       ctx.effect(()=>ctx.locale.register(NS,dictionaries),"dj-plan-explorer: dictionaries");
-      const t=ctx.locale.bind(NS),operatorT=ctx.locale.bind("djOperatorLibrary");
+      const t=ctx.locale.bind(NS),operatorT=ctx.locale.bind("djOperatorLibrary"),resultT=ctx.locale.bind("djResults");
       ctx.effect(()=>mountLauncher(t),"dj-plan-explorer: persistent launcher");
       const onAction=(action,ref)=>ctx.conversation.send(action==="create"?`确认并创建任务：批准并执行方案 ${ref.task_id}/${ref.plan_version}，content_hash=${ref.content_hash}`:`我想调整方案 ${ref.task_id}/${ref.plan_version}，请询问我需要修改的内容。`);
       ctx.slots.inject("conversation.chat.turnTail",()=>ctx.slots.register({name:"conversation.chat.turnTail",select:selectPlanData,locale:NS,inject:(sessionId)=>({onAction,sessionId})},PlanTurnTail));
       ctx.slots.inject("conversation.input.dock",()=>ctx.slots.register({name:"conversation.input.dock",id:"dj-plan-session-scope",order:20,inject:(sessionId)=>({sessionId})},SessionPlanScope));
-      ctx.slots.inject("shell.auxiliary",()=>ctx.slots.register({name:"shell.auxiliary",locale:NS,inject:()=>({operatorT,close:()=>{setPlanPanelOpen(false);ctx.layout.closeAuxiliary()},toggleMaximized:()=>ctx.layout.toggleAuxiliaryMaximized(),open:()=>ctx.layout.openAuxiliary()})},AuxiliaryHost));
+      ctx.slots.inject("shell.auxiliary",()=>ctx.slots.register({name:"shell.auxiliary",locale:NS,inject:()=>({operatorT,resultT,close:()=>{setPlanPanelOpen(false);ctx.layout.closeAuxiliary()},toggleMaximized:()=>ctx.layout.toggleAuxiliaryMaximized(),open:()=>ctx.layout.openAuxiliary()})},AuxiliaryHost));
     }
     exports.payloadFrom=payloadFrom;exports.projectionDefinition=projectionDefinition;exports.planSessionState={registerPlan,setActiveSession,activePlan,registerActivePlan,dismissPlan,isPlanDismissed};exports.apply=apply;exports.inject=inject;return module.exports;
   }
