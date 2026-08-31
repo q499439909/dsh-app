@@ -49,3 +49,17 @@ test("projects run tool results into a conversation-scoped result card", () => {
   assert.equal(state.runs.length, 1);
   assert.equal(state.runs[0].value.run.result_ref, "run_r001");
 });
+
+test("groups variants of one sample while keeping dataset files as attachments", () => {
+  const presentation = clientModule.buildResultPresentation([
+    { assetId: "mask_1", itemId: "mask_0001", sampleId: "0001", variant: "mask", name: "0001 mask.png", mediaType: "image/png", labels: ["蒙版"], metrics: { score: 0.8 } },
+    { assetId: "overlay_1", itemId: "overlay_0001", sampleId: "0001", variant: "overlay", name: "0001 overlay.jpg", mediaType: "image/jpeg", labels: ["叠加预览"], metrics: { score: 0.8 } },
+    { assetId: "manifest", itemId: "manifest", name: "manifest.json", mediaType: "application/json", labels: [], metrics: {} },
+    { assetId: "embeddings", itemId: "embeddings", name: "embeddings.npz", mediaType: "application/octet-stream", labels: [], metrics: {} },
+  ]);
+
+  assert.equal(presentation.samples.length, 1);
+  assert.equal(presentation.samples[0].sampleId, "0001");
+  assert.deepEqual(presentation.samples[0].variants.map(item => item.variant), ["overlay", "mask"]);
+  assert.deepEqual(presentation.attachments.map(item => item.name), ["manifest.json", "embeddings.npz"]);
+});
