@@ -63,7 +63,7 @@ flowchart LR
     D --> P[prepare_plan]
     P --> PY[plan.yaml]
     P --> PV[plan-view.json]
-    P --> E[plan/ready 事件]
+    P --> E[持久化 prepare_plan 工具结果]
     E --> C[对话 PlanCard]
     E --> L[方案持久入口]
     C --> X[PlanExplorer 右侧面板]
@@ -82,7 +82,7 @@ flowchart LR
 | 模块 | 职责 |
 | --- | --- |
 | PlanPresentation | 校验展示分组、生成稳定节点标识、保存并加载 `plan-view.json` |
-| PlanEventProjection | 将 `plan/ready` 等事件投影为对话中的 PlanCard 和会话 Plan 列表 |
+| PlanEventProjection | 将持久化的 `prepare_plan` / `run_plan` 工具结果投影为 PlanCard、会话 Plan 列表和 Run 关联 |
 | AuxiliaryPanelHost | 在同一个右侧区域内切换算子库或 PlanExplorer |
 | PlanExplorer | 渲染线性阶段图、节点详情、完整 Plan 和运行状态 |
 | RunStatusAdapter | 把 DJ 的 `op_idx + op_name` 事件规范化成前端步骤状态 |
@@ -255,15 +255,17 @@ PlanPresentation 必须执行以下校验：
 
 ### 8.1 DSH 当前能力判断
 
-当前 DSH 安装中存在对话事件、`conversation.chat.node`、`conversation.view` 和图片附件展示扩展，但没有发现可直接复用的语义化“方案卡片”。因此应新增 Plan 专用事件和投影，而不是将 PlanCard 当作普通图片附件或从 Markdown 中解析。
+当前 DSH 安装中存在对话事件、`conversation.chat.node`、`conversation.view` 和图片附件展示扩展，但没有发现可直接复用的语义化“方案卡片”。因此应新增 Plan 专用投影，而不是将 PlanCard 当作普通图片附件或从 Markdown 中解析。
 
-### 8.2 `plan/ready` 事件
+### 8.2 Plan 就绪事件投影
 
-`prepare_plan` 成功并保存展示文件后，向当前会话写入持久化事件：
+当前 DSH 已把工具调用及结果持久化到会话事件流，因此第一版直接识别成功的 `mcp__dj__prepare_plan` 结构化结果，并投影为 `djPlans` Turn Data；无需让 Host 重复写入一条 `plan/ready` 事件。刷新和恢复会话时仍能重建卡片。若后续 Plan 可能由对话外部创建，再补充独立的 `plan/ready` 事件，二者使用相同载荷。
+
+投影后的逻辑载荷等价于：
 
 ```json
 {
-  "type": "plan/ready",
+  "type": "djPlans",
   "data": {
     "plan_id": "task_xxx/plan_v001",
     "plan_version": "plan_v001",
@@ -602,7 +604,7 @@ DSH UI 补丁增加：
 
 ### P1：创建前方案预览
 
-- 新增 `plan/ready` 持久化事件；
+- 新增 `prepare_plan` / `run_plan` 持久化工具结果投影；
 - 对话渲染 PlanCard；
 - 增加“方案”持久入口；
 - 右侧打开 PlanExplorer；
@@ -652,7 +654,7 @@ DSH UI 补丁增加：
 
 ### 17.2 PlanCard 与入口
 
-- `plan/ready` 生成卡片；
+- `prepare_plan` 持久化工具结果生成卡片；
 - 刷新后卡片恢复；
 - 无 Plan 时不显示入口；
 - 多 Plan 版本时入口打开最新版本；
@@ -695,4 +697,4 @@ DSH UI 补丁增加：
 
 本方案采用“对话 PlanCard + 顶部持久入口 + 单一右侧面板”的双入口结构。DJ Plan 继续作为唯一执行事实，DSH 额外生成与 Plan 版本绑定的展示描述。创建任务前用于审查方案，创建任务后复用同一节点图显示逐算子状态。
 
-该结构不要求改变 DJ recipe，不依赖解析助手文本，并保留从线性流程升级到 DAG 的空间。第一版的主要新增工作集中在展示描述契约、Plan 专用会话事件、右侧 PlanExplorer 和逐算子状态适配四处。
+该结构不要求改变 DJ recipe，不依赖解析助手文本，并保留从线性流程升级到 DAG 的空间。第一版的主要新增工作集中在展示描述契约、Plan 专用会话投影、右侧 PlanExplorer 和逐算子状态适配四处。

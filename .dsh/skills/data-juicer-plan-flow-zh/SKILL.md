@@ -27,7 +27,7 @@ MCP 服务器没有独立业务工作区。源码目录和进程 cwd 只是实�
 7. 确认后，把 Data-Juicer 内置算子和已批准外部算子统一写入标准 `plan.recipe.process`，并在顶层写入精确 `capability_bindings`。第一次检索与已批准能力解析都无适用结果时，先明确记录能力 gap；只有存在可证明的召回异常时才允许一次定向纠错检索，不得换词循环搜索。
 8. 对真实缺口按可复用的数据契约划分算子：先问“把当前业务对象换成同类输入（例如把 face mask 换成任意 mask），算法是否仍可原样工作”。若可以，业务对象不得进入能力名称。Agent 生成的算子必须遵循 DJ 基类、注册和 schema 规范，由结构化 Fetcher 获取固定 revision 的源码、wheel 或模型，再调用 `prepare_capability` 完成隔离构建与验证。不得用 shell 下载、不得把新算子直接写入 DJ 源码、不得接触业务输入。若多个缺口属于同一任务，可以放入一次 Capability Proposal。
 9. `prepare_capability` 返回 `pending_approval` 后，展示所有 Operator Artifact、源码/依赖/模型 hash、许可证、验证结果、权限和资源约束，请求第一次明确的“批准能力”。只有该选择才能调用 `approve_capability`。内容变化、验证失败或批准 hash 不符时停止；已经 `available` 的相同能力自动复用，不重复审批和构建。
-10. 调用 `mcp__dj__prepare_plan`。修改时复用 `task_id`，并把上一版 `plan_version` 作为 `base_plan_version`。每次调用都生成新的不可变 `plan_vNNN`，不得编辑旧版本。
+10. 调用 `mcp__dj__prepare_plan`，并同时提交仅用于展示的 `view_spec.groups`：先确定真实且有序的 `plan.recipe.process`，再按当前任务语义把连续的 `process_indexes` 组织为少量阶段，为每个阶段给出准确的 `title` 和可选 `summary`。不得为了展示制造不存在的执行步骤，不得改变、跳跃或重复算子索引；不适合合并的步骤保持独立。修改时复用 `task_id`，并把上一版 `plan_version` 作为 `base_plan_version`。每次调用都生成新的不可变 `plan_vNNN` 及其 `plan-view.json`，不得编辑旧版本。
 11. 展示规范化 Plan、校验结果、Runtime 组合、版本 diff 和 `content_hash`，请求第二次明确的 `批准并执行`、`修改计划` 或 `取消任务`。能力审批绝不等于 Plan 审批；只有明确选择 `批准并执行` 才能调用 `mcp__dj__approve_plan`。
 12. 明确批准后，用准确的 `task_id + plan_version + content_hash` 调用 `mcp__dj__approve_plan`，随后调用 `mcp__dj__run_plan`。正式运行只能经 Runtime Resolver 和 loopback Broker 进入断网 Docker；若返回 `BROKER_REQUIRED`，停止并报告部署配置问题，绝不得回退共享本机 Python 环境。
 13. 轮询 `mcp__dj__get_run`。失败时先检查日志；只有安全的瞬时故障才能原样重试。若 recipe、脚本、路径或数据语义需要变化，必须创建新版本并重新确认。只有用户要求取消或继续不安全时才调用 `mcp__dj__cancel_run`。

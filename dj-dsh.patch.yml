@@ -16,6 +16,10 @@
       name: '@dsh-dj/operator-library'
       config:
         catalogUrl: http://127.0.0.1:8010/operator-catalog
+    - id: dj-plan-explorer
+      name: '@dsh-dj/plan-explorer'
+      config:
+        baseUrl: http://127.0.0.1:8010
     - id: mcp-dj
       name: '@deepseek-ai/dsh-mcp-client'
       config:

@@ -16,8 +16,10 @@ $pythonExe = 'D:\dj\.envs\dsh-dj\python.exe'
 $mcpTempDir = Join-Path $djRoot '.mcp-tmp'
 $mcpEnvFile = Join-Path $dshRoot 'dj-plan-flow.env'
 $operatorPluginSource = Join-Path $dshRoot 'packages\dsh-dj-operator-library'
+$planPluginSource = Join-Path $dshRoot 'packages\dsh-dj-plan-explorer'
 $dshProfileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\profiles\web'
 $operatorPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\operator-library'
+$planPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\plan-explorer'
 
 function Read-DotEnv {
     param([string]$Path)
@@ -61,6 +63,9 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
 if (-not (Test-Path -LiteralPath $operatorPluginSource -PathType Container)) {
     throw "Cannot find the DSH operator library plugin: $operatorPluginSource"
 }
+if (-not (Test-Path -LiteralPath $planPluginSource -PathType Container)) {
+    throw "Cannot find the DSH plan explorer plugin: $planPluginSource"
+}
 $operatorPluginParent = Split-Path -Parent $operatorPluginLink
 New-Item -ItemType Directory -Force -Path $operatorPluginParent | Out-Null
 if (Test-Path -LiteralPath $operatorPluginLink) {
@@ -71,6 +76,15 @@ if (Test-Path -LiteralPath $operatorPluginLink) {
     }
 } else {
     New-Item -ItemType Junction -Path $operatorPluginLink -Target $operatorPluginSource | Out-Null
+}
+if (Test-Path -LiteralPath $planPluginLink) {
+    $existingPlanLink = Get-Item -LiteralPath $planPluginLink -Force
+    $resolvedPlanTarget = @($existingPlanLink.Target | ForEach-Object { [System.IO.Path]::GetFullPath([string]$_) })
+    if ($existingPlanLink.LinkType -ne 'Junction' -or $resolvedPlanTarget -notcontains [System.IO.Path]::GetFullPath($planPluginSource)) {
+        throw "The DSH profile already contains a different @dsh-dj/plan-explorer entry: $planPluginLink"
+    }
+} else {
+    New-Item -ItemType Junction -Path $planPluginLink -Target $planPluginSource | Out-Null
 }
 New-Item -ItemType Directory -Force -Path $mcpTempDir | Out-Null
 $mcpEnvironment = Read-DotEnv -Path $mcpEnvFile

@@ -146,10 +146,13 @@ index 21d631b9ba840cb804fcd204b05aa130ff16e168..ae772b1ff2ff522678effe560b1ac4a4
  					toggleSidebar: (d) => {
  						if (d.narrow) d.narrowExpanded = !d.narrowExpanded;
  						else d.sidebar = d.sidebar === 0 ? 280 : 0;
-@@ -303,6 +356,17 @@ window.__ModuleLoader__.load({
+@@ -303,6 +356,20 @@ window.__ModuleLoader__.load({
  					},
  					closeDetails: (d) => {
  						d.details = 0;
++					},
++					openAuxiliary: (d) => {
++						if (d.auxiliary === 0) d.auxiliary = AUXILIARY_DEFAULT;
 +					},
 +					toggleAuxiliary: (d) => {
 +						d.auxiliary = d.auxiliary === 0 ? AUXILIARY_DEFAULT : 0;
@@ -164,12 +167,15 @@ index 21d631b9ba840cb804fcd204b05aa130ff16e168..ae772b1ff2ff522678effe560b1ac4a4
  					}
  				}
  			});
-@@ -334,6 +398,15 @@ window.__ModuleLoader__.load({
+@@ -334,6 +401,18 @@ window.__ModuleLoader__.load({
  			closeDetails() {
  				this.#require().closeDetails();
  			}
 +			toggleAuxiliary() {
 +				this.#require().toggleAuxiliary();
++			}
++			openAuxiliary() {
++				this.#require().openAuxiliary();
 +			}
 +			closeAuxiliary() {
 +				this.#require().closeAuxiliary();
@@ -180,7 +186,7 @@ index 21d631b9ba840cb804fcd204b05aa130ff16e168..ae772b1ff2ff522678effe560b1ac4a4
  			#require() {
  				if (this.#panels === void 0) throw new Error("layout: panel actions not wired (root entry not mounted)");
  				return this.#panels;
-@@ -417,6 +490,10 @@ window.__ModuleLoader__.load({
+@@ -417,6 +496,10 @@ window.__ModuleLoader__.load({
  							kind: "single",
  							scope: "session"
  						},
@@ -241,10 +247,12 @@ diff --git a/lib/types/client/service.d.ts b/lib/types/client/service.d.ts
 index e2a1a0cc02f511ac87a6a4bd2d523c34f9e02ae2..930e97e64c56dc62094485de2b0dc5191799084a 100644
 --- a/lib/types/client/service.d.ts
 +++ b/lib/types/client/service.d.ts
-@@ -25,6 +25,12 @@ export interface ILayout {
+@@ -25,6 +25,14 @@ export interface ILayout {
      openDetails(): void;
      /** Close the details panel. */
      closeDetails(): void;
++    /** Open the optional auxiliary work surface. */
++    openAuxiliary(): void;
 +    /** Toggle the optional auxiliary work surface. */
 +    toggleAuxiliary(): void;
 +    /** Close the optional auxiliary work surface. */
@@ -254,10 +262,11 @@ index e2a1a0cc02f511ac87a6a4bd2d523c34f9e02ae2..930e97e64c56dc62094485de2b0dc519
  }
  /** Cross-plugin panel-action face (ctx.layout). */
  export declare class LayoutController implements ILayout {
-@@ -43,5 +49,8 @@ export declare class LayoutController implements ILayout {
+@@ -43,5 +51,9 @@ export declare class LayoutController implements ILayout {
      openDetails(): void;
      /** Close the details panel. */
      closeDetails(): void;
++    openAuxiliary(): void;
 +    toggleAuxiliary(): void;
 +    closeAuxiliary(): void;
 +    toggleAuxiliaryMaximized(): void;
@@ -276,7 +285,7 @@ index a79da9e4c4d315030b0949450a64c5e42a02204e..9e4771a9ad419ede850524842af8add3
      details: number;
      narrow: boolean;
      narrowExpanded: boolean;
-@@ -27,11 +29,15 @@ type LayoutState = {
+@@ -27,11 +29,16 @@ type LayoutState = {
   */
  type LayoutActions = {
      setSidebar: (draft: LayoutState, px: number) => void;
@@ -286,6 +295,7 @@ index a79da9e4c4d315030b0949450a64c5e42a02204e..9e4771a9ad419ede850524842af8add3
      setNarrow: (draft: LayoutState, narrow: boolean) => void;
      openDetails: (draft: LayoutState) => void;
      closeDetails: (draft: LayoutState) => void;
++    openAuxiliary: (draft: LayoutState) => void;
 +    toggleAuxiliary: (draft: LayoutState) => void;
 +    closeAuxiliary: (draft: LayoutState) => void;
 +    toggleAuxiliaryMaximized: (draft: LayoutState) => void;
