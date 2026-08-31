@@ -280,7 +280,7 @@ PlanPresentation 必须执行以下校验：
 }
 ```
 
-对话投影使用该事件生成 PlanCard。刷新、恢复会话或读取历史时，卡片仍可重新构建。
+对话投影使用该事件生成 PlanCard。由于执行许可通常通过 `ask_user_question` 在当前未结束回合中询问，PlanCard 采用双落点：Plan 就绪后立即显示在 `conversation.input.dock`，保证询问许可前可审查；回合结束后再由 `conversation.chat.turnTail` 固化到历史消息流。刷新、恢复会话或读取历史时，两处都由同一持久化工具结果重建，并按 PlanRef 去重。
 
 ### 8.3 “方案”持久入口
 

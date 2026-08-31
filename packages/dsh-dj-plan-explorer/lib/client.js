@@ -9,7 +9,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const css = `
-.djPlanCard{margin-top:16px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-business-primary) 30%,var(--dsw-alias-border-l2));border-radius:14px;padding:14px 15px;background:linear-gradient(135deg,color-mix(in srgb,var(--dsw-alias-state-business-primary) 7%,var(--dsw-alias-bg-base)),var(--dsw-alias-bg-base));max-width:620px}.djPlanCardTop{display:flex;gap:12px;align-items:flex-start}.djPlanCardIcon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 13%,var(--dsw-alias-bg-base));color:var(--dsw-alias-state-business-primary)}.djPlanCardMain{min-width:0;flex:1}.djPlanCardTitle{font-size:14px;font-weight:680;line-height:21px}.djPlanCardMeta{margin-top:3px;color:var(--dsw-alias-label-tertiary);font-size:11px}.djPlanCardSummary{margin:10px 0 0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px}.djPlanCardActions{display:flex;gap:8px;margin-top:12px}.djPlanButton{height:32px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;padding:0 12px;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer}.djPlanButton[data-primary=true]{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary);color:#fff}
+.djPlanCard{margin-top:16px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-business-primary) 30%,var(--dsw-alias-border-l2));border-radius:14px;padding:14px 15px;background:linear-gradient(135deg,color-mix(in srgb,var(--dsw-alias-state-business-primary) 7%,var(--dsw-alias-bg-base)),var(--dsw-alias-bg-base));max-width:620px}.djPlanDock{box-sizing:border-box;width:calc(100% - 32px);max-width:620px;margin:0 auto 8px}.djPlanDock .djPlanCard{max-width:none;margin-top:0}.djPlanCardTop{display:flex;gap:12px;align-items:flex-start}.djPlanCardIcon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 13%,var(--dsw-alias-bg-base));color:var(--dsw-alias-state-business-primary)}.djPlanCardMain{min-width:0;flex:1}.djPlanCardTitle{font-size:14px;font-weight:680;line-height:21px}.djPlanCardMeta{margin-top:3px;color:var(--dsw-alias-label-tertiary);font-size:11px}.djPlanCardSummary{margin:10px 0 0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px}.djPlanCardActions{display:flex;gap:8px;margin-top:12px}.djPlanButton{height:32px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;padding:0 12px;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer}.djPlanButton[data-primary=true]{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary);color:#fff}
 .djPlanLauncher{height:34px;border:0;border-radius:8px;padding:0 11px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;cursor:pointer}.djPlanLauncher:hover,.djPlanLauncher[data-active=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
 .djPlanRoot{height:100%;min-width:0;display:flex;flex-direction:column;overflow:hidden;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base)}.djPlanHeader{height:64px;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid var(--dsw-alias-border-l2);flex:none}.djPlanTitleWrap{min-width:0}.djPlanTitle{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.djPlanVersion{font-size:10px;color:var(--dsw-alias-label-tertiary);font-family:monospace}.djPlanSpacer{flex:1}.djPlanIconButton{width:34px;height:34px;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:18px}.djPlanIconButton:hover{background:var(--dsw-alias-interactive-bg-hover)}.djPlanTabs{height:44px;display:flex;align-items:end;gap:18px;padding:0 18px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}.djPlanTab{height:38px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer}.djPlanTab[data-active=true]{color:var(--dsw-alias-state-business-primary);border-bottom-color:var(--dsw-alias-state-business-primary)}.djPlanBody{min-height:0;flex:1;overflow:auto;padding:18px;scrollbar-gutter:stable}.djPlanState{height:100%;display:grid;place-items:center;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:13px}.djPlanFlow{max-width:720px;margin:0 auto}.djPlanBoundary{text-align:center;border:1px dashed var(--dsw-alias-border-l2);border-radius:10px;padding:9px;color:var(--dsw-alias-label-tertiary);font-size:11px}.djPlanArrow{text-align:center;color:var(--dsw-alias-label-tertiary);line-height:25px}.djPlanStage{border:1px solid var(--dsw-alias-border-l2);border-radius:13px;overflow:hidden;background:var(--dsw-alias-bg-base)}.djPlanStageHead{width:100%;box-sizing:border-box;border:0;background:transparent;color:inherit;padding:12px 13px;display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer}.djPlanStageHead:hover{background:var(--dsw-alias-interactive-bg-hover)}.djPlanStageName{min-width:0;flex:1}.djPlanStageTitle{font-size:13px;font-weight:680}.djPlanStageSummary{margin-top:2px;color:var(--dsw-alias-label-tertiary);font-size:10px}.djPlanStatus{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:none}.djPlanStatus[data-status=running]{background:#3b82f6;box-shadow:0 0 0 3px #3b82f622}.djPlanStatus[data-status=succeeded]{background:#22c55e}.djPlanStatus[data-status=failed]{background:#ef4444}.djPlanStatus[data-status=cancelled],.djPlanStatus[data-status=skipped]{background:#a1a1aa}.djPlanSteps{border-top:1px solid var(--dsw-alias-border-l1);padding:6px}.djPlanStep{width:100%;box-sizing:border-box;border:0;border-radius:8px;background:transparent;color:inherit;padding:9px 10px;display:flex;align-items:center;gap:9px;text-align:left;cursor:pointer}.djPlanStep:hover,.djPlanStep[data-selected=true]{background:var(--dsw-alias-interactive-bg-hover)}.djPlanStepIndex{color:var(--dsw-alias-label-tertiary);font:10px monospace}.djPlanStepName{min-width:0;flex:1;font:11px monospace;overflow-wrap:anywhere}.djPlanStepMetrics{color:var(--dsw-alias-label-tertiary);font-size:9px}.djPlanCode{margin:0;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:14px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font:11px/18px monospace;white-space:pre-wrap;overflow-wrap:anywhere}.djPlanDetailTitle{margin:0 0 10px;font-size:15px}.djPlanHint{margin-bottom:12px;border-radius:9px;padding:9px 11px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px}.djPlanFooter{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--dsw-alias-border-l1);flex:none}
 `;
@@ -30,14 +30,26 @@ window.__ModuleLoader__.load({
     const plans = new Map();
     const runs = new Map();
     let latestPlan = null;
+    let pendingPlan = null;
     function planKey(ref){return `${ref.workspace_root}|${ref.task_id}|${ref.plan_version}`}
     function openPage(page){window.dispatchEvent(new CustomEvent("dsh-dj-open-auxiliary",{detail:page}))}
     function registerPlan(ref){plans.set(planKey(ref),ref);latestPlan=ref;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}
+    function discoverPlan(ref){plans.set(planKey(ref),ref);latestPlan=ref;pendingPlan=ref;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}
+    function settlePlan(ref){if(pendingPlan&&planKey(pendingPlan)===planKey(ref)){pendingPlan=null;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}}
     function registerRun(item){const run=item.run||item;if(item.workspace_root&&run?.task_id&&run?.plan_version){runs.set(`${item.workspace_root}|${run.task_id}|${run.plan_version}`,run);window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}}
 
+    function collectPayloadCandidates(value,candidates=[]){
+      if(value==null)return candidates;
+      if(typeof value==="string"){candidates.push(value);return candidates}
+      if(Array.isArray(value)){for(const item of value)collectPayloadCandidates(item,candidates);return candidates}
+      if(typeof value!=="object")return candidates;
+      if(typeof value.text==="string")candidates.push(value.text);
+      if(value.structuredContent!==undefined)candidates.push(value.structuredContent);
+      if(value.content!==undefined)collectPayloadCandidates(value.content,candidates);
+      return candidates;
+    }
     function payloadFrom(message){
-      const candidates=[message?.meta];
-      for(const block of message?.content||[])if(block&&typeof block.text==="string")candidates.push(block.text);
+      const candidates=[message?.meta,...collectPayloadCandidates(message?.content)];
       for(const candidate of candidates){
         let value=candidate;
         if(typeof value==="string")try{value=JSON.parse(value)}catch{continue}
@@ -53,7 +65,7 @@ window.__ModuleLoader__.load({
       match:(event)=>{
         if(event.type==="turn/start")return{id:String(event.data.turn),role:"start"};
         if(event.type==="tool/call")return{id:String(event.data.turn),role:"update"};
-        if(event.type==="tool/result"&&runtime.isAppendSurfaceEvent(event))return{id:String(event.data.turn),role:"update"};
+        if(event.type==="tool/result"&&(runtime.isAppendSurfaceEvent(event)||event.data?.surfaceOp==="append"))return{id:String(event.data.turn),role:"update"};
         return null;
       },
       start:(_context,match)=>({turn:match.event.data.turn,calls:new Map(),plans:[],runs:[]}),
@@ -64,7 +76,7 @@ window.__ModuleLoader__.load({
         const name=context.state.calls.get(callId)||"";
         const value=payloadFrom(match.event.data.message);
         if(!value)return context.state;
-        if(name.endsWith("prepare_plan")){const ref=asPlan(value);return ref?{...context.state,plans:[...context.state.plans,{seq:match.event.seq,ref}]}:context.state}
+        if(name.endsWith("prepare_plan")){const ref=asPlan(value);if(ref)discoverPlan(ref);return ref?{...context.state,plans:[...context.state.plans,{seq:match.event.seq,ref}]}:context.state}
         if(name.endsWith("run_plan")||name.endsWith("get_run"))return{...context.state,runs:[...context.state.runs,{seq:match.event.seq,value}]};
         return context.state;
       },
@@ -77,9 +89,14 @@ window.__ModuleLoader__.load({
       return h("section",{className:"djPlanCard"},h("div",{className:"djPlanCardTop"},h("div",{className:"djPlanCardIcon"},"◇"),h("div",{className:"djPlanCardMain"},h("div",{className:"djPlanCardTitle"},planRef.title),h("div",{className:"djPlanCardMeta"},`${planRef.plan_version} · ${t("stages").replace("{count}",planRef.stage_count)} · ${t("steps").replace("{count}",planRef.step_count)}`),planRef.summary?h("p",{className:"djPlanCardSummary"},planRef.summary):null,h("div",{className:"djPlanCardActions"},h("button",{type:"button",className:"djPlanButton","data-primary":true,onClick:()=>openPage({kind:"plan",planRef})},t("show")),h("button",{type:"button",className:"djPlanButton",onClick:()=>onAction("create",planRef)},t("create"))))))
     }
     function PlanTurnTail({matched,t,onAction}){
-      React.useEffect(()=>{for(const item of matched.runs)registerRun(item.value)},[matched.runs]);
+      React.useEffect(()=>{for(const item of matched.runs)registerRun(item.value);const finalPlan=matched.plans.at(-1)?.ref;if(finalPlan)settlePlan(finalPlan)},[matched.plans,matched.runs]);
       React.useEffect(()=>{const keys=new Set(matched.plans.map(item=>planKey(item.ref)));const listener=event=>{const detail=event.detail;if(detail?.planRef&&keys.has(planKey(detail.planRef)))onAction(detail.action,detail.planRef)};window.addEventListener("dsh-dj-plan-action",listener);return()=>window.removeEventListener("dsh-dj-plan-action",listener)},[matched.plans,onAction]);
       return h(React.Fragment,null,...matched.plans.map(item=>h(PlanCard,{planRef:item.ref,t,onAction,key:planKey(item.ref)})));
+    }
+    function PendingPlanDock({t,onAction}){
+      const[,refresh]=React.useReducer(x=>x+1,0);
+      React.useEffect(()=>{const sync=()=>refresh();window.addEventListener("dsh-dj-plan-state",sync);return()=>window.removeEventListener("dsh-dj-plan-state",sync)},[]);
+      return pendingPlan?h("div",{className:"djPlanDock"},h(PlanCard,{planRef:pendingPlan,t,onAction})):null;
     }
 
     function mountLauncher(t){
@@ -132,8 +149,9 @@ window.__ModuleLoader__.load({
       ctx.effect(()=>mountLauncher(t),"dj-plan-explorer: persistent launcher");
       const onAction=(action,ref)=>ctx.conversation.send(action==="create"?`确认并创建任务：批准并执行方案 ${ref.task_id}/${ref.plan_version}，content_hash=${ref.content_hash}`:`我想调整方案 ${ref.task_id}/${ref.plan_version}，请询问我需要修改的内容。`).catch(()=>{});
       ctx.slots.inject("conversation.chat.turnTail",()=>ctx.slots.register({name:"conversation.chat.turnTail",select:selectPlanData,locale:NS,inject:()=>({onAction})},PlanTurnTail));
+      ctx.slots.inject("conversation.input.dock",()=>ctx.slots.register({name:"conversation.input.dock",id:"dj-plan-ready",order:20,locale:NS,inject:()=>({onAction})},PendingPlanDock));
       ctx.slots.inject("shell.auxiliary",()=>ctx.slots.register({name:"shell.auxiliary",locale:NS,inject:()=>({operatorT,close:()=>ctx.layout.closeAuxiliary(),toggleMaximized:()=>ctx.layout.toggleAuxiliaryMaximized(),open:()=>ctx.layout.openAuxiliary()})},AuxiliaryHost));
     }
-    exports.apply=apply;exports.inject=inject;return module.exports;
+    exports.payloadFrom=payloadFrom;exports.projectionDefinition=projectionDefinition;exports.apply=apply;exports.inject=inject;return module.exports;
   }
 });
