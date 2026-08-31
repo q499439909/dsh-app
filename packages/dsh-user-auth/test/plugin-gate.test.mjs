@@ -45,6 +45,13 @@ function fixture() {
   const disposers = [];
   const listeners = new Map();
   const ctx = {
+    apiProxy: {
+      sessions: Object.fromEntries(["list", "search", "create", "history", "models", "selectModel", "rename", "fork", "prompt", "attachment", "updateQueue", "cancel"].map(key => [key, async request => ({ rpcId: request.rpcId, result: { ok: true, value: key === "list" || key === "search" ? { items: [] } : {} } })])),
+      events: { async *mux() {}, async *host() {} },
+      subagents: Object.fromEntries(["list", "history", "prompt", "interrupt"].map(key => [key, async request => ({ rpcId: request.rpcId, result: { ok: true, value: {} } })])),
+      downloads: { sessionLog: async () => new Response("ok") },
+      respond: async () => ({ accepted: true }),
+    },
     webServer: {
       register(route) {
         routes.set(route.path, route);

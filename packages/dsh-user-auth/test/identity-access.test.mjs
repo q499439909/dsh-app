@@ -112,3 +112,33 @@ test("production cookie shape is HttpOnly, same-site, and secure", () => {
     identity.close();
   }
 });
+
+test("session ownership is private to its user while administrators may inspect all", () => {
+  const { identity } = fixture();
+  try {
+    const first = identity.register({ username: "first-user", password: "correct horse battery", inviteCode: "test-invite" });
+    const second = identity.register({ username: "second-user", password: "correct horse battery", inviteCode: "test-invite" });
+    const firstPrincipal = identity.authenticateToken(first.token);
+    const secondPrincipal = identity.authenticateToken(second.token);
+    identity.bindSession("session-a", first.user.userId);
+    assert.equal(identity.canAccessSession(firstPrincipal, "session-a"), true);
+    assert.equal(identity.canAccessSession(secondPrincipal, "session-a"), false);
+    assert.deepEqual(identity.sessionsFor(secondPrincipal, ["session-a", "session-b"]), []);
+    identity.setUserRole(second.user.userId, "admin");
+    assert.equal(identity.canAccessSession(identity.authenticateToken(second.token), "session-a"), true);
+  } finally {
+    identity.close();
+  }
+});
+
+test("request principal is carried through asynchronous API work", async () => {
+  const { identity } = fixture();
+  try {
+    const session = identity.register({ username: "context-user", password: "correct horse battery", inviteCode: "test-invite" });
+    assert.equal(identity.enterRequest({ headers: { cookie: `dsh_session=${session.token}` } })?.userId, session.user.userId);
+    await Promise.resolve();
+    assert.equal(identity.currentPrincipal()?.userId, session.user.userId);
+  } finally {
+    identity.close();
+  }
+});

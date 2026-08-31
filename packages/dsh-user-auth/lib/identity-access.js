@@ -7,6 +7,7 @@ import {
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 const USERNAME_PATTERN = /^[\p{L}\p{N}_-]{3,32}$/u;
 const DEFAULT_PASSWORD_PARAMETERS = Object.freeze({
@@ -147,6 +148,7 @@ export class IdentityAccess {
     this.absoluteTtlMs = options.absoluteTtlMs ?? DEFAULT_ABSOLUTE_TTL_MS;
     this.secureCookie = options.secureCookie ?? true;
     this.cookieName = options.cookieName ?? (this.secureCookie ? "__Host-dsh_session" : "dsh_session");
+    this.requestContext = new AsyncLocalStorage();
     mkdirSync(dirname(options.databasePath), { recursive: true });
     this.db = new DatabaseSync(options.databasePath);
     this.db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
@@ -191,6 +193,12 @@ export class IdentityAccess {
         created_at INTEGER NOT NULL,
         detail_json TEXT NOT NULL DEFAULT '{}'
       );
+      CREATE TABLE IF NOT EXISTS session_owners (
+        session_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS session_owners_user_id ON session_owners(user_id);
     `);
   }
 
@@ -294,6 +302,61 @@ export class IdentityAccess {
 
   authenticateRequest(req) {
     return this.authenticateToken(parseCookies(req?.headers?.cookie).get(this.cookieName));
+  }
+
+  enterRequest(req) {
+    const principal = this.authenticateRequest(req);
+    if (principal !== null) this.requestContext.enterWith(principal);
+    return principal;
+  }
+
+  currentPrincipal() {
+    return this.requestContext.getStore() ?? null;
+  }
+
+  sessionOwner(sessionId) {
+    return this.db.prepare("SELECT user_id FROM session_owners WHERE session_id = ?").get(String(sessionId))?.user_id ?? null;
+  }
+
+  canAccessSession(principal, sessionId) {
+    if (!principal) return false;
+    if (principal.role === "admin") return true;
+    return this.sessionOwner(sessionId) === principal.userId;
+  }
+
+  bindSession(sessionId, userId) {
+    const id = String(sessionId);
+    const existing = this.sessionOwner(id);
+    if (existing !== null && existing !== userId) {
+      throw new AuthError("session_owned", "该对话属于其他用户", 403);
+    }
+    this.db.prepare("INSERT OR IGNORE INTO session_owners (session_id, user_id, created_at) VALUES (?, ?, ?)")
+      .run(id, userId, this.now());
+  }
+
+  claimSessions(userId, sessionIds) {
+    const insert = this.db.prepare("INSERT OR IGNORE INTO session_owners (session_id, user_id, created_at) VALUES (?, ?, ?)");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const sessionId of new Set(sessionIds.map(String))) insert.run(sessionId, userId, this.now());
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  sessionsFor(principal, sessionIds) {
+    if (!principal) return [];
+    if (principal.role === "admin") return [...sessionIds];
+    return sessionIds.filter(sessionId => this.sessionOwner(sessionId) === principal.userId);
+  }
+
+  setUserRole(userId, role) {
+    if (role !== "admin" && role !== "user") throw new Error("invalid role");
+    const result = this.db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE user_id = ?")
+      .run(role, this.now(), userId);
+    if (result.changes !== 1) throw new Error(`unknown user: ${userId}`);
   }
 
   logoutToken(token) {

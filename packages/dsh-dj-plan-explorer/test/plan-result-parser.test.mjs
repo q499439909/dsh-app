@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 let clientModule;
+global.CustomEvent = class CustomEvent { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } };
 global.window = {
+  dispatchEvent() {},
   __ModuleLoader__: {
     load({ factory }) {
       clientModule = factory(id => {
@@ -83,4 +85,17 @@ test("matches the persisted append marker nested in tool-result data", () => {
   });
 
   assert.deepEqual(match, { id: "1", role: "update" });
+});
+
+test("keeps the latest plan scoped to the active conversation", () => {
+  const first = { workspace_root: "D:\\one", task_id: "task-one", plan_version: "v1" };
+  const second = { workspace_root: "D:\\two", task_id: "task-two", plan_version: "v1" };
+  clientModule.planSessionState.registerPlan("session-one", first);
+  clientModule.planSessionState.registerPlan("session-two", second);
+  clientModule.planSessionState.setActiveSession("session-one");
+  assert.equal(clientModule.planSessionState.activePlan(), first);
+  clientModule.planSessionState.setActiveSession("session-two");
+  assert.equal(clientModule.planSessionState.activePlan(), second);
+  clientModule.planSessionState.setActiveSession("session-empty");
+  assert.equal(clientModule.planSessionState.activePlan(), null);
 });

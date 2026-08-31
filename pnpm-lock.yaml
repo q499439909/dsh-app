@@ -27,7 +27,7 @@ importers:
         version: file:packages/dsh-dj-plan-explorer(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-locale@0.1.1-rc.2(3a5d049ec3569b9e4c3b8d4d3063a904))(@deepseek-ai/dsh-client-runtime@0.1.1-rc.2(cb4cb8169c074f46f5e849113e8ad34d))(@deepseek-ai/dsh-client-ui-conversation@0.1.1-rc.2(46ffc15c276989981ba621cd9debaa29))(@deepseek-ai/dsh-client-ui-layout@0.1.1-rc.2(patch_hash=95fcf97a90b0424c4c6b43e39837b3eee3808bb3d7927c4f1f9a831d4cd3d4ba)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.1-rc.2(cb4cb8169c074f46f5e849113e8ad34d))(@deepseek-ai/dsh-client-ui-theme@0.1.1-rc.2(e5656417b041cb44105e5be1a786b4cb))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-host-webserver@0.1.1-rc.2(patch_hash=3f3b896b2bf9387702b46bfe20fdbc52cb0c7c777cc7f9d619e834d6721624d8)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@dsh-dj/operator-library@file:packages/dsh-dj-operator-library(e1a8ab0d342a36d5c3d4a0ec5b0a07f4))(react@18.3.1)
       '@dsh-dj/user-auth':
         specifier: file:packages/dsh-user-auth
-        version: file:packages/dsh-user-auth(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-host-webserver@0.1.1-rc.2(patch_hash=3f3b896b2bf9387702b46bfe20fdbc52cb0c7c777cc7f9d619e834d6721624d8)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))
+        version: file:packages/dsh-user-auth(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-host-apiproxy@0.1.1-rc.2)(@deepseek-ai/dsh-host-webserver@0.1.1-rc.2(patch_hash=3f3b896b2bf9387702b46bfe20fdbc52cb0c7c777cc7f9d619e834d6721624d8)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))
 
 packages:
 
@@ -2153,6 +2153,7 @@ packages:
     resolution: {directory: packages/dsh-user-auth, type: directory}
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-host-apiproxy': ^0.1.1-rc.2
       '@deepseek-ai/dsh-host-webserver': ^0.1.1-rc.2
 
   '@earendil-works/pi-ai@0.82.1':
@@ -6008,9 +6009,10 @@ snapshots:
       '@dsh-dj/operator-library': file:packages/dsh-dj-operator-library(e1a8ab0d342a36d5c3d4a0ec5b0a07f4)
       react: 18.3.1
 
-  '@dsh-dj/user-auth@file:packages/dsh-user-auth(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-host-webserver@0.1.1-rc.2(patch_hash=3f3b896b2bf9387702b46bfe20fdbc52cb0c7c777cc7f9d619e834d6721624d8)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))':
+  '@dsh-dj/user-auth@file:packages/dsh-user-auth(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-host-apiproxy@0.1.1-rc.2)(@deepseek-ai/dsh-host-webserver@0.1.1-rc.2(patch_hash=3f3b896b2bf9387702b46bfe20fdbc52cb0c7c777cc7f9d619e834d6721624d8)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@deepseek-ai/dsh-host-apiproxy': 0.1.1-rc.2(7a1c54e2b954eca6f88bad802758761b)
       '@deepseek-ai/dsh-host-webserver': 0.1.1-rc.2(patch_hash=3f3b896b2bf9387702b46bfe20fdbc52cb0c7c777cc7f9d619e834d6721624d8)(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
 
   '@earendil-works/pi-ai@0.82.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.3)(zod@4.4.3)':

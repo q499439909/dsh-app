@@ -1,9 +1,10 @@
 import { resolve } from "node:path";
 import { AuthError, IdentityAccess } from "./identity-access.js";
 import { authScript, authStyles } from "./client-inline.js";
+import { installSessionAccess } from "./session-access.js";
 
 export const name = "dsh-user-auth";
-export const inject = ["webServer"];
+export const inject = ["webServer", "apiProxy"];
 
 const BODY_LIMIT = 16 * 1024;
 
@@ -103,10 +104,11 @@ export function apply(ctx, config = {}) {
         const path = new URL(req.url || "/", "http://localhost").pathname;
         if (!path.startsWith("/api")) return true;
       }
-      return identity.authenticateRequest(req) !== null;
+      return identity.enterRequest(req) !== null;
     }),
     "dsh-user-auth: global request guard",
   );
+  ctx.effect(() => installSessionAccess(ctx.apiProxy, identity), "dsh-user-auth: session ownership boundary");
 
   exactRoute(ctx, "/auth/session", "GET", async (req, res) => {
     const principal = identity.authenticateRequest(req);

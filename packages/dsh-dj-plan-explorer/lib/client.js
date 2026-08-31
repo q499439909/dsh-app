@@ -28,16 +28,15 @@ window.__ModuleLoader__.load({
 
     const plans = new Map();
     const runs = new Map();
-    let latestPlan = null;
-    let pendingPlan = null;
+    const latestPlans = new Map();
+    let activeSessionId = null;
     let planPanelOpen = false;
     function planKey(ref){return `${ref.workspace_root}|${ref.task_id}|${ref.plan_version}`}
     function setPlanPanelOpen(open){planPanelOpen=open;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}
     function openPage(page){setPlanPanelOpen(page?.kind==="plan");window.dispatchEvent(new CustomEvent("dsh-dj-open-auxiliary",{detail:page}))}
-    function registerPlan(ref){plans.set(planKey(ref),ref);latestPlan=ref;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}
-    function discoverPlan(ref){plans.set(planKey(ref),ref);latestPlan=ref;pendingPlan=ref;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}
-    function settlePlan(ref){if(pendingPlan&&planKey(pendingPlan)===planKey(ref)){pendingPlan=null;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}}
-    function dismissPlan(ref){if(pendingPlan&&planKey(pendingPlan)===planKey(ref)){pendingPlan=null;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}}
+    function registerPlan(sessionId,ref){plans.set(planKey(ref),ref);latestPlans.set(sessionId,ref);window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}
+    function setActiveSession(sessionId){activeSessionId=sessionId??null;window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}
+    function activePlan(){return activeSessionId===null?null:latestPlans.get(activeSessionId)||null}
     function registerRun(item){const run=item.run||item;if(item.workspace_root&&run?.task_id&&run?.plan_version){runs.set(`${item.workspace_root}|${run.task_id}|${run.plan_version}`,run);window.dispatchEvent(new CustomEvent("dsh-dj-plan-state"))}}
 
     function collectPayloadCandidates(value,candidates=[]){
@@ -78,7 +77,7 @@ window.__ModuleLoader__.load({
         const name=context.state.calls.get(callId)||"";
         const value=payloadFrom(match.event.data.message);
         if(!value)return context.state;
-        if(name.endsWith("prepare_plan")){const ref=asPlan(value);if(ref)discoverPlan(ref);return ref?{...context.state,plans:[...context.state.plans,{seq:match.event.seq,ref}]}:context.state}
+        if(name.endsWith("prepare_plan")){const ref=asPlan(value);return ref?{...context.state,plans:[...context.state.plans,{seq:match.event.seq,ref}]}:context.state}
         if(name.endsWith("run_plan")||name.endsWith("get_run"))return{...context.state,runs:[...context.state.runs,{seq:match.event.seq,value}]};
         return context.state;
       },
@@ -86,9 +85,9 @@ window.__ModuleLoader__.load({
     };
     function selectPlanData(owner){const data=owner.turn.data.get("djPlans");if(!data)return null;const ps=(data.plans||[]).filter(x=>x.seq<=owner.seq);const rs=(data.runs||[]).filter(x=>x.seq<=owner.seq);return ps.length||rs.length?{plans:ps,runs:rs}:null}
 
-    function PlanCard({planRef,t,onAction,onClose}){
+    function PlanCard({planRef,sessionId,t,onAction,onClose}){
       const[busy,setBusy]=React.useState(""),[error,setError]=React.useState("");
-      React.useEffect(()=>{registerPlan(planRef)},[planRef]);
+      React.useEffect(()=>{registerPlan(sessionId,planRef)},[sessionId,planRef]);
       const act=async action=>{if(busy)return;setBusy(action);setError("");try{await onAction(action,planRef);if(action==="create")onClose?.()}catch{setError(t("submitFailed"))}finally{setBusy("")}};
       const closeButton=onClose?h("button",{type:"button",className:"djPlanCardClose",title:t("close"),"aria-label":t("close"),onClick:onClose},"×"):null;
       const actions=h("div",{className:"djPlanCardActions"},
@@ -104,21 +103,20 @@ window.__ModuleLoader__.load({
       );
       return h("section",{className:"djPlanCard"},closeButton,h("div",{className:"djPlanCardTop"},h("div",{className:"djPlanCardIcon"},"◇"),main));
     }
-    function PlanTurnTail({matched,t,onAction}){
-      React.useEffect(()=>{for(const item of matched.runs)registerRun(item.value);const finalPlan=matched.plans.at(-1)?.ref;if(finalPlan)settlePlan(finalPlan)},[matched.plans,matched.runs]);
+    function PlanTurnTail({matched,sessionId,t,onAction}){
+      React.useEffect(()=>{for(const item of matched.runs)registerRun(item.value)},[matched.runs]);
       React.useEffect(()=>{const keys=new Set(matched.plans.map(item=>planKey(item.ref)));const listener=event=>{const detail=event.detail;if(detail?.planRef&&keys.has(planKey(detail.planRef)))onAction(detail.action,detail.planRef)};window.addEventListener("dsh-dj-plan-action",listener);return()=>window.removeEventListener("dsh-dj-plan-action",listener)},[matched.plans,onAction]);
-      return h(React.Fragment,null,...matched.plans.map(item=>h(PlanCard,{planRef:item.ref,t,onAction,key:planKey(item.ref)})));
+      return h(React.Fragment,null,...matched.plans.map(item=>h(PlanCard,{planRef:item.ref,sessionId,t,onAction,key:planKey(item.ref)})));
     }
-    function PendingPlanDock({t,onAction}){
-      const[,refresh]=React.useReducer(x=>x+1,0);
-      React.useEffect(()=>{const sync=()=>refresh();window.addEventListener("dsh-dj-plan-state",sync);return()=>window.removeEventListener("dsh-dj-plan-state",sync)},[]);
-      return pendingPlan?h("div",{className:"djPlanDock"},h(PlanCard,{planRef:pendingPlan,t,onAction,onClose:()=>dismissPlan(pendingPlan)})):null;
+    function SessionPlanScope({sessionId}){
+      React.useEffect(()=>{setActiveSession(sessionId);return()=>{if(activeSessionId===sessionId)setActiveSession(null)}},[sessionId]);
+      return null;
     }
 
     function mountLauncher(t){
       if(typeof document==="undefined")return()=>{};
-      const button=document.createElement("button");button.type="button";button.className="djPlanLauncher";button.setAttribute("role","tab");button.textContent=t("plan");button.hidden=true;button.addEventListener("click",()=>latestPlan&&openPage({kind:"plan",planRef:latestPlan}));
-      const place=()=>{button.hidden=!latestPlan;button.setAttribute("aria-selected",String(planPanelOpen));const lists=Array.from(document.querySelectorAll('[role="tablist"]'));const list=lists.find(node=>/轨迹|Trajectory/i.test(node.textContent||""));if(!list)return;const nativeTabs=Array.from(list.querySelectorAll('[role="tab"]')).filter(node=>node!==button);const inactive=nativeTabs.find(node=>node.getAttribute("aria-selected")!=="true")||nativeTabs[0];const active=nativeTabs.find(node=>node.getAttribute("aria-selected")==="true");const baseClasses=new Set(Array.from(inactive?.classList||[]));const activeClasses=Array.from(active?.classList||[]).filter(name=>!baseClasses.has(name));button.className=[...baseClasses,...planPanelOpen?activeClasses:[],"djPlanLauncher"].join(" ");if(!list.contains(button))list.appendChild(button)};
+      const button=document.createElement("button");button.type="button";button.className="djPlanLauncher";button.setAttribute("role","tab");button.textContent=t("plan");button.hidden=true;button.addEventListener("click",()=>{const plan=activePlan();if(plan)openPage({kind:"plan",planRef:plan})});
+      const place=()=>{const plan=activePlan();button.hidden=!plan;button.setAttribute("aria-selected",String(planPanelOpen&&!!plan));const lists=Array.from(document.querySelectorAll('[role="tablist"]'));const list=lists.find(node=>/轨迹|Trajectory/i.test(node.textContent||""));if(!list)return;const nativeTabs=Array.from(list.querySelectorAll('[role="tab"]')).filter(node=>node!==button);const inactive=nativeTabs.find(node=>node.getAttribute("aria-selected")!=="true")||nativeTabs[0];const active=nativeTabs.find(node=>node.getAttribute("aria-selected")==="true");const baseClasses=new Set(Array.from(inactive?.classList||[]));const activeClasses=Array.from(active?.classList||[]).filter(name=>!baseClasses.has(name));button.className=[...baseClasses,...planPanelOpen&&plan?activeClasses:[],"djPlanLauncher"].join(" ");if(!list.contains(button))list.appendChild(button)};
       const observer=new MutationObserver(place);observer.observe(document.body,{childList:true,subtree:true});window.addEventListener("dsh-dj-plan-state",place);place();
       return()=>{observer.disconnect();window.removeEventListener("dsh-dj-plan-state",place);button.remove()};
     }
@@ -164,10 +162,10 @@ window.__ModuleLoader__.load({
       const t=ctx.locale.bind(NS),operatorT=ctx.locale.bind("djOperatorLibrary");
       ctx.effect(()=>mountLauncher(t),"dj-plan-explorer: persistent launcher");
       const onAction=(action,ref)=>ctx.conversation.send(action==="create"?`确认并创建任务：批准并执行方案 ${ref.task_id}/${ref.plan_version}，content_hash=${ref.content_hash}`:`我想调整方案 ${ref.task_id}/${ref.plan_version}，请询问我需要修改的内容。`);
-      ctx.slots.inject("conversation.chat.turnTail",()=>ctx.slots.register({name:"conversation.chat.turnTail",select:selectPlanData,locale:NS,inject:()=>({onAction})},PlanTurnTail));
-      ctx.slots.inject("conversation.input.dock",()=>ctx.slots.register({name:"conversation.input.dock",id:"dj-plan-ready",order:20,locale:NS,inject:()=>({onAction})},PendingPlanDock));
+      ctx.slots.inject("conversation.chat.turnTail",()=>ctx.slots.register({name:"conversation.chat.turnTail",select:selectPlanData,locale:NS,inject:(sessionId)=>({onAction,sessionId})},PlanTurnTail));
+      ctx.slots.inject("conversation.input.dock",()=>ctx.slots.register({name:"conversation.input.dock",id:"dj-plan-session-scope",order:20,inject:(sessionId)=>({sessionId})},SessionPlanScope));
       ctx.slots.inject("shell.auxiliary",()=>ctx.slots.register({name:"shell.auxiliary",locale:NS,inject:()=>({operatorT,close:()=>{setPlanPanelOpen(false);ctx.layout.closeAuxiliary()},toggleMaximized:()=>ctx.layout.toggleAuxiliaryMaximized(),open:()=>ctx.layout.openAuxiliary()})},AuxiliaryHost));
     }
-    exports.payloadFrom=payloadFrom;exports.projectionDefinition=projectionDefinition;exports.apply=apply;exports.inject=inject;return module.exports;
+    exports.payloadFrom=payloadFrom;exports.projectionDefinition=projectionDefinition;exports.planSessionState={registerPlan,setActiveSession,activePlan};exports.apply=apply;exports.inject=inject;return module.exports;
   }
 });
