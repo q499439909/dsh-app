@@ -63,3 +63,28 @@ test("groups variants of one sample while keeping dataset files as attachments",
   assert.deepEqual(presentation.samples[0].variants.map(item => item.variant), ["overlay", "mask"]);
   assert.deepEqual(presentation.attachments.map(item => item.name), ["manifest.json", "embeddings.npz"]);
 });
+
+test("offers only discriminating sample labels instead of common or variant labels", () => {
+  const samples = [
+    { sampleId: "1", labels: ["处理成功", "多人脸", "蒙版", "叠加预览"], variants: [{ variantLabel: "蒙版" }, { variantLabel: "叠加预览" }] },
+    { sampleId: "2", labels: ["处理成功", "单人脸", "蒙版", "叠加预览"], variants: [{ variantLabel: "蒙版" }, { variantLabel: "叠加预览" }] },
+  ];
+
+  assert.deepEqual(clientModule.sampleLabelOptions(samples), ["多人脸", "单人脸"]);
+});
+
+test("paginates filtered samples with stable first, last, and requested pages", () => {
+  const samples = Array.from({ length: 30 }, (_, index) => ({
+    sampleId: String(index + 1).padStart(4, "0"),
+    name: String(index + 1).padStart(4, "0"),
+    labels: index % 2 ? ["多人脸"] : ["单人脸"],
+    variants: [{ mediaType: "image/jpeg" }],
+  }));
+
+  const first = clientModule.filterAndPaginateSamples(samples, { page: 1, pageSize: 20 });
+  const last = clientModule.filterAndPaginateSamples(samples, { page: 99, pageSize: 20 });
+  const filtered = clientModule.filterAndPaginateSamples(samples, { label: "多人脸", page: 1, pageSize: 20 });
+  assert.deepEqual([first.items.length, first.page, first.pageCount], [20, 1, 2]);
+  assert.deepEqual([last.items.length, last.page, last.pageCount], [10, 2, 2]);
+  assert.deepEqual([filtered.total, filtered.items.length], [15, 15]);
+});

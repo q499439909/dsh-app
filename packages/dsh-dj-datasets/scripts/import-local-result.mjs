@@ -62,6 +62,13 @@ function metricSummary(records, name) {
 
 function buildView(sourceManifest) {
   const records = Array.isArray(sourceManifest.records) ? sourceManifest.records : [];
+  const labelsFor = record => {
+    if (record.status !== "ok") return ["处理失败"];
+    const labels = [Number(record.face_count) > 1 ? "多人脸" : "单人脸"];
+    const score = Number(record.detection_score);
+    if (Number.isFinite(score)) labels.push(score < 0.3 ? "低置信度" : score < 0.6 ? "中置信度" : "高置信度");
+    return labels;
+  };
   const items = [];
   for (const record of records) {
     const stem = String(record.image || "").replace(/\.[^.]+$/, "");
@@ -79,7 +86,7 @@ function buildView(sourceManifest) {
       asset_path: `overlays/${stem}.jpg`,
       display_name: `${stem} · 叠加预览.jpg`,
       media_type: "image/jpeg",
-      labels: ["叠加预览", "处理成功"],
+      labels: labelsFor(record),
       metrics,
     });
     items.push({
@@ -90,7 +97,7 @@ function buildView(sourceManifest) {
       asset_path: `masks/${stem}.png`,
       display_name: `${stem} · 人脸蒙版.png`,
       media_type: "image/png",
-      labels: ["蒙版", "处理成功"],
+      labels: labelsFor(record),
       metrics,
     });
   }
@@ -104,7 +111,7 @@ function buildView(sourceManifest) {
     title: "Buffalo + BiSeNet 人脸处理结果（CPU）",
     summary: {
       record_count: Number(sourceManifest.success_count ?? records.length),
-      labels: { 叠加预览: records.length, 蒙版: records.length, 处理成功: records.filter(item => item.status === "ok").length },
+      labels: records.flatMap(labelsFor).reduce((counts, label) => ({ ...counts, [label]: (counts[label] || 0) + 1 }), {}),
       metrics,
     },
     items,
