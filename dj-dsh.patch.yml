@@ -20,6 +20,10 @@
       name: '@dsh-dj/plan-explorer'
       config:
         baseUrl: http://127.0.0.1:8010
+    - id: dsh-user-auth
+      name: '@dsh-dj/user-auth'
+      config:
+        enabled: true
     - id: mcp-dj
       name: '@deepseek-ai/dsh-mcp-client'
       config:

@@ -15,11 +15,14 @@ $patchFile = Join-Path $dshRoot 'dj-dsh.patch.yml'
 $pythonExe = 'D:\dj\.envs\dsh-dj\python.exe'
 $mcpTempDir = Join-Path $djRoot '.mcp-tmp'
 $mcpEnvFile = Join-Path $dshRoot 'dj-plan-flow.env'
+$authEnvFile = Join-Path $dshRoot 'dsh-auth.env'
 $operatorPluginSource = Join-Path $dshRoot 'packages\dsh-dj-operator-library'
 $planPluginSource = Join-Path $dshRoot 'packages\dsh-dj-plan-explorer'
+$authPluginSource = Join-Path $dshRoot 'packages\dsh-user-auth'
 $dshProfileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\profiles\web'
 $operatorPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\operator-library'
 $planPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\plan-explorer'
+$authPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\user-auth'
 
 function Read-DotEnv {
     param([string]$Path)
@@ -66,6 +69,9 @@ if (-not (Test-Path -LiteralPath $operatorPluginSource -PathType Container)) {
 if (-not (Test-Path -LiteralPath $planPluginSource -PathType Container)) {
     throw "Cannot find the DSH plan explorer plugin: $planPluginSource"
 }
+if (-not (Test-Path -LiteralPath $authPluginSource -PathType Container)) {
+    throw "Cannot find the DSH user auth plugin: $authPluginSource"
+}
 $operatorPluginParent = Split-Path -Parent $operatorPluginLink
 New-Item -ItemType Directory -Force -Path $operatorPluginParent | Out-Null
 if (Test-Path -LiteralPath $operatorPluginLink) {
@@ -86,7 +92,25 @@ if (Test-Path -LiteralPath $planPluginLink) {
 } else {
     New-Item -ItemType Junction -Path $planPluginLink -Target $planPluginSource | Out-Null
 }
+if (Test-Path -LiteralPath $authPluginLink) {
+    $existingAuthLink = Get-Item -LiteralPath $authPluginLink -Force
+    $resolvedAuthTarget = @($existingAuthLink.Target | ForEach-Object { [System.IO.Path]::GetFullPath([string]$_) })
+    if ($existingAuthLink.LinkType -ne 'Junction' -or $resolvedAuthTarget -notcontains [System.IO.Path]::GetFullPath($authPluginSource)) {
+        throw "The DSH profile already contains a different @dsh-dj/user-auth entry: $authPluginLink"
+    }
+} else {
+    New-Item -ItemType Junction -Path $authPluginLink -Target $authPluginSource | Out-Null
+}
 New-Item -ItemType Directory -Force -Path $mcpTempDir | Out-Null
+$authEnvironment = Read-DotEnv -Path $authEnvFile
+if (-not $authEnvironment.ContainsKey('DSH_REGISTRATION_INVITE_HASH')) {
+    throw "Missing DSH_REGISTRATION_INVITE_HASH in $authEnvFile. Generate it with the user-auth helper before starting DSH Web."
+}
+foreach ($name in @('DSH_REGISTRATION_INVITE_HASH', 'DSH_AUTH_DATABASE_PATH', 'DSH_AUTH_SECURE_COOKIE')) {
+    if ($authEnvironment.ContainsKey($name) -and -not [string]::IsNullOrWhiteSpace($authEnvironment[$name])) {
+        [Environment]::SetEnvironmentVariable($name, $authEnvironment[$name], 'Process')
+    }
+}
 $mcpEnvironment = Read-DotEnv -Path $mcpEnvFile
 if ($mcpEnvironment.Count -eq 0) {
     Write-Warning "No plan-flow environment file found at $mcpEnvFile. API VLM plans will fail validation until it is configured."

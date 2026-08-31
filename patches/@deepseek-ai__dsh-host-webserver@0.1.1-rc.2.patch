@@ -1,0 +1,125 @@
+diff --git a/lib/index.js b/lib/index.js
+index 02d57d9e8ff17a44fc215ae84b6753c06160fa1f..95fe87ad7a2a961307d5d2280c99d6d9512a754b 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -103,6 +103,7 @@ var WebServer = class extends Service {
+ 	prefixes = /* @__PURE__ */ new Map();
+ 	upgrades = /* @__PURE__ */ new Map();
+ 	upgradedSockets = /* @__PURE__ */ new Set();
++	requestGuards = [];
+ 	indexTaps = [];
+ 	fallback;
+ 	server;
+@@ -161,6 +162,14 @@ var WebServer = class extends Service {
+ 			this.fallback = void 0;
+ 		};
+ 	}
++	/** Register a request guard that runs before every HTTP and upgrade route. */
++	registerRequestGuard(guard) {
++		this.requestGuards.push(guard);
++		return () => {
++			const at = this.requestGuards.indexOf(guard);
++			if (at !== -1) this.requestGuards.splice(at, 1);
++		};
++	}
+ 	/**
+ 	* Register a raw-HTML index transform, the escape hatch for markup no
+ 	* {@link IndexInjection} row expresses: {@link renderIndex} applies taps in
+@@ -178,6 +187,15 @@ var WebServer = class extends Service {
+ 	/** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
+ 	async [Service.init]() {
+ 		const handle = async (req, res) => {
++			for (const guard of this.requestGuards) {
++				if (await guard(req, "http")) continue;
++				res.writeHead(401, {
++					"content-type": "text/plain; charset=utf-8",
++					"cache-control": "no-store"
++				});
++				res.end("unauthorized");
++				return;
++			}
+ 			/* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
+ 			requests; the field is only optional on the client-side IncomingMessage type */
+ 			const rawPath = new URL(req.url ?? "/", "http://x").pathname;
+@@ -215,29 +233,32 @@ var WebServer = class extends Service {
+ 				socket.off("error", onError);
+ 				this.upgradedSockets.delete(socket);
+ 			});
+-			let route;
+-			try {
++			const dispatch = async () => {
+ 				/* v8 ignore next -- node:http always sets url on server requests. */
+-				route = this.upgrades.get(new URL(req.url ?? "/", "http://x").pathname);
+-			} catch (error) {
+-				this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)));
+-				socket.destroy();
+-				return;
+-			}
+-			if (route === void 0) {
+-				socket.destroy();
+-				return;
+-			}
+-			this.upgradedSockets.add(socket);
+-			try {
+-				Promise.resolve(route.handler(req, socket, head)).catch((error) => {
+-					this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)));
++				const route = this.upgrades.get(new URL(req.url ?? "/", "http://x").pathname);
++				if (route === void 0) {
+ 					socket.destroy();
+-				});
+-			} catch (error) {
++					return;
++				}
++				for (const guard of this.requestGuards) {
++					if (await guard(req, "upgrade")) continue;
++					socket.end([
++						"HTTP/1.1 401 Unauthorized",
++						"Connection: close",
++						"Content-Type: text/plain; charset=utf-8",
++						"Content-Length: 12",
++						"",
++						"unauthorized"
++					].join("\r\n"));
++					return;
++				}
++				this.upgradedSockets.add(socket);
++				await route.handler(req, socket, head);
++			};
++			dispatch().catch((error) => {
+ 				this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)));
+ 				socket.destroy();
+-			}
++			});
+ 		});
+ 		await new Promise((resolve, reject) => {
+ 			this.server.once("error", reject);
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+index 60f5a7fbd725f3f5600b812c906f6529d44d2faf..cee8c86731ac6160ca04dc876f7d9c344580c85d 100644
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -46,6 +46,8 @@ export interface WebUpgradeRoute {
+     /** Owns protocol negotiation and the upgraded socket after dispatch. */
+     handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>;
+ }
++/** Runs before a matched HTTP or upgrade route. False rejects the request with 401. */
++export type WebRequestGuard = (req: IncomingMessage, kind: 'http' | 'upgrade') => boolean | Promise<boolean>;
+ /** Gateway config: the listen address. */
+ export interface Config {
+     /** Listen host; the two supported values are loopback and all-interfaces. */
+@@ -67,6 +69,7 @@ export declare class WebServer extends Service {
+     private readonly prefixes;
+     private readonly upgrades;
+     private readonly upgradedSockets;
++    private readonly requestGuards;
+     private readonly indexTaps;
+     private fallback;
+     private server;
+@@ -99,6 +102,8 @@ export declare class WebServer extends Service {
+      * @returns the disposer releasing the seat.
+      */
+     registerFallback(handler: WebRoute['handler']): () => void;
++    /** Register a guard that runs before every HTTP and upgrade route. */
++    registerRequestGuard(guard: WebRequestGuard): () => void;
+     /**
+      * Register a raw-HTML index transform, the escape hatch for markup no
+      * {@link IndexInjection} row expresses: {@link renderIndex} applies taps in
