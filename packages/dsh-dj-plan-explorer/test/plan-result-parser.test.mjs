@@ -107,3 +107,19 @@ test("publishes location data under the projection definition's owned kind", () 
 
   assert.equal(location.key, clientModule.projectionDefinition.kind);
 });
+
+test("registers a plan opened from the active conversation without the old argument mismatch", () => {
+  const plan = { workspace_root: "D:\\active", task_id: "task-active", plan_version: "v1" };
+  clientModule.planSessionState.setActiveSession("session-active");
+
+  assert.doesNotThrow(() => clientModule.planSessionState.registerActivePlan(plan));
+  assert.equal(clientModule.planSessionState.activePlan(), plan);
+});
+
+test("dismisses a plan card only in the conversation where it was closed", () => {
+  const plan = { workspace_root: "D:\\shared", task_id: "task-shared", plan_version: "v1" };
+  clientModule.planSessionState.dismissPlan("session-one", plan);
+
+  assert.equal(clientModule.planSessionState.isPlanDismissed("session-one", plan), true);
+  assert.equal(clientModule.planSessionState.isPlanDismissed("session-two", plan), false);
+});
