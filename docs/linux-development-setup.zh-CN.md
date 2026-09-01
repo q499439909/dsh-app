@@ -42,7 +42,7 @@ git clone --branch codex/dj-plan-explorer --single-branch \
 ```bash
 cd ~/src/dsh-app
 corepack enable
-pnpm install --frozen-lockfile
+corepack pnpm install --frozen-lockfile
 
 python3.12 -m venv ~/src/data-juicer/.venv
 ~/src/data-juicer/.venv/bin/python -m pip install --upgrade pip

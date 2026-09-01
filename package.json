@@ -2,6 +2,7 @@
   "name": "dsh-app",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "prototype:face-cpu": "powershell -ExecutionPolicy Bypass -File prototypes/buffalo-bisenet-cpu/run.ps1"
   },
