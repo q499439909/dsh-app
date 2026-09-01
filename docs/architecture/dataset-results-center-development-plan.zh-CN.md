@@ -1,6 +1,6 @@
 # Data-Juicer 结果中心开发方案
 
-状态：需求已确认，已与用户登录方案对齐，待实施
+状态：需求已确认，已与用户登录方案对齐；本机原型已实现，待补齐正式输出契约、事件驱动发布、持久深链接与 S3 Adapter
 
 范围：DSH Web + Data-Juicer Plan Flow；当前本机存储，后续 GPU 服务器 + S3
 
@@ -44,10 +44,28 @@
 | 失败任务 | Run 执行报错或没有输出的不进入结果中心；无执行错误且有可验证输出的非完整运行标记为“部分完成” |
 | 数据量 | 当前几百条；接口仍采用服务端分页 |
 | 保留策略 | 长期积累，允许手动删除，暂不自动过期 |
+| 业务输出 | 保留 Run 的全部业务输出；样本媒体进入可视化区，JSON/JSONL、报告和模型附件进入“数据集文件”；日志、缓存、临时文件和私有运行状态排除 |
+| 标签来源 | 每个 Plan 在 `output_contract` 中声明稳定机器 key、中文显示名和映射/阈值；页面与 Catalog 不根据文件名或自然语言猜测 |
+| 文件角色 | 原图、结果、蒙版、叠加预览、视频和附件使用独立 `role`，不混入样本标签筛选 |
+| 聊天跳转 | 登记成功后返回结构化 `dataset_ref`；默认跳到数据集详情，允许携带 `sample_id` 跳到具体样本；刷新、复制链接和重新登录后可恢复 |
+| 发布中状态 | 本机校验或 S3 上传未完成时，聊天显示“正在发布结果”；仅在字节完整、清单校验和 Catalog 登记均成功后显示“查看结果” |
+| 删除语义 | 用户看到的是删除；内部先写 `deleting`/tombstone，再删除本机或 S3 字节并失败重试；最小审计记录保留但不可恢复业务文件 |
 | 当前存储 | 继续读取受控的本机 Run 输出，不复制数据 |
 | 后续存储 | GPU 服务器使用 S3；稳定资源 ID 不变，Bucket 和前缀可配置、可迁移 |
 
-## 3. 当前实现缺口
+## 3. 当前实现基线与缺口
+
+截至当前本机原型：
+
+- `web-dj.ps1` 默认以 `native` 启动 Plan Flow，本机 Run 使用 `local-process`；Broker 模式仍可显式切换；
+- 原生 Worker 已能在成功终态生成 `result-manifest.json`；
+- DSH 已有登录隔离、SQLite Catalog、左侧“结果中心”、列表、详情、图片/视频/JSON 预览、样本合并、筛选、分页、下载和删除原型；
+- 聊天中的“查看结果”目前通过页面内部事件打开 `dataset_id`，还不是刷新和复制后可恢复的深链接；
+- Catalog 当前依赖打开页面后扫描对话历史来发现 Run，不是 Run 终态主动触发的 Result Publication；
+- 当前 `dataset-view.json` 仍可能由导入脚本或人工补写，Plan `output_contract` 尚未成为所有新 Run 的正式约束；
+- 当前 SQLite 将资产集合内联在结果记录中，适合几百条原型数据，但在长期积累和 S3 阶段前应拆为可分页的样本与资产表。
+
+因此，后续工作不是另建一套结果中心，而是把现有原型收敛成“运行输出兼容层 → Result Publication → DatasetCatalog → Local/S3 Adapter”的可靠链路。
 
 现有运行链已经具备安全的输出收集和 `result-manifest.json`，但该文件只提供相对路径、SHA-256、大小、文件数和总字节数，不能表达：
 
@@ -85,7 +103,11 @@ DSH DatasetCatalog
   ├─ 左侧结果中心和聊天摘要
   ├─ 通过 RunOutputPort 读取运行事实与展示契约
   └─ 通过 ObjectCatalog 读取或删除结果字节
-             ▼
+
+Run 终态 ──▶ ResultPublisher ──▶ DatasetCatalog
+                    │
+                    ├──────────▶ ObjectCatalog
+                    ▼
 Plan Flow RunOutputGateway
   ├─ 验证 workspace/task/plan/run 身份
   ├─ 验证 result-manifest 与 dataset-view
@@ -96,6 +118,8 @@ ObjectCatalog
   ├─ 当前 LocalRunOutputAdapter
   └─ 后续 S3 Adapter
 ```
+
+`ResultPublisher` 是运行终态与结果产品之间的深模块。调用方只提交可信 `Principal + sessionId + resultRef`；其实现隐藏清单校验、视图构建、Local/S3 发布、所有权登记、幂等、补偿和重试。不要让浏览器扫描对话历史来承担主发布职责；历史 reconcile 只作为重启恢复和旧数据导入的兜底。
 
 ### 4.1 DSH 深模块 `DatasetCatalog`
 
@@ -161,6 +185,36 @@ DSH `DatasetCatalog` 依赖 `RunOutputPort` 读取 Run 状态、清单和展示�
 
 任何公共响应不得返回 `trusted_workspace`、`output_dir`、日志绝对路径、容器 ID 或模型路径。
 
+### 4.3.1 Result Publication 状态机
+
+Host 观察到 Run 进入终态后，使用运行发起人的服务器 `Principal` 主动调用：
+
+```ts
+publish(principal, sessionId, resultRef): Promise<PublicationRef | null>
+getPublication(principal, publicationId): Promise<PublicationStatus>
+```
+
+状态机：
+
+```text
+run terminal
+  → validating
+  → publishing
+  → registering
+  → available
+        ↘ retryable_failure
+        ↘ rejected（failed / 含执行错误 / 无业务输出）
+```
+
+- `validating`：验证 Run 身份、状态、业务输出清单和展示契约；
+- `publishing`：Local Adapter 只确认受控本机定位，S3 Adapter 上传到私有 staging 前缀并逐对象校验；
+- `registering`：在事务中写入所有者、origin 唯一键、存储版本、样本与资产索引；
+- `available`：聊天卡片才显示“查看结果”，结果中心列表才对普通用户可见；
+- `retryable_failure`：保留 publication 记录和安全错误码，后台幂等重试；不得留下对普通用户可见的半成品结果；
+- `rejected`：按既定准入规则不登记，错误仍留在原聊天。
+
+同一 origin 重复发布必须复用同一 publication/dataset，不重复上传、不重复登记。DSH 或 MCP 重启后由 Publication reconcile 继续未完成状态；对话历史扫描不再是正常运行的唯一发现方式。
+
 ### 4.4 两层结果契约
 
 保留现有 `result-manifest.json` 作为不可变的物理文件清单和完整性事实；新增 `dataset-view.json` 作为展示语义清单。不要把两种职责合并。
@@ -173,9 +227,17 @@ DSH `DatasetCatalog` 依赖 `RunOutputPort` 读取 Run 状态、清单和展示�
 {
   "schema_version": 1,
   "title": "筛选后的视频数据集",
+  "label_definitions": {
+    "decision.keep": {"display_name": "保留"},
+    "decision.drop": {"display_name": "删除"},
+    "quality.hd": {"display_name": "高清"}
+  },
+  "metric_definitions": {
+    "quality_score": {"display_name": "质量分", "type": "number", "min": 0, "max": 1}
+  },
   "summary": {
     "record_count": 320,
-    "labels": {"保留": 280, "删除": 40},
+    "labels": {"decision.keep": 280, "decision.drop": 40},
     "metrics": {
       "quality_score": {"min": 0.12, "max": 0.98, "mean": 0.81}
     }
@@ -183,10 +245,12 @@ DSH `DatasetCatalog` 依赖 `RunOutputPort` 读取 Run 状态、清单和展示�
   "items": [
     {
       "item_id": "item_000001",
+      "sample_id": "sample_000001",
       "asset_path": "videos/000001.mp4",
       "display_name": "000001.mp4",
       "media_type": "video/mp4",
-      "labels": ["保留", "高清"],
+      "role": "result",
+      "labels": ["decision.keep", "quality.hd"],
       "metrics": {"quality_score": 0.91}
     }
   ],
@@ -203,10 +267,13 @@ DSH `DatasetCatalog` 依赖 `RunOutputPort` 读取 Run 状态、清单和展示�
 
 1. `asset_path` 必须存在于已验证的 `result-manifest.json` 中。
 2. `item_id` 在单个数据集内唯一，不允许用宿主路径充当标识。
-3. `labels` 只允许有界字符串；`metrics` 第一版只接受有限数值和短字符串。
-4. 管线没有生成 `dataset-view.json` 时，Catalog 生成只按文件类型分类的默认视图，确保旧管线仍可展示和下载。
-5. 展示契约无效时不阻止已成功的 Run；数据集标记为 `degraded`，页面仍显示物理文件清单和契约错误。
-6. 第一版允许 `items` 内联几百条；同时规定上限。超过上限时升级为 `items.jsonl` + 游标分页，页面接口不变。
+3. 同一样本的原图、结果、蒙版和叠加预览共享 `sample_id`，使用 `role`/`variant` 区分；文件角色不得进入标签筛选。
+4. `labels` 只保存 `output_contract` 声明的稳定机器 key；页面用 `label_definitions.display_name` 展示中文，不允许 Catalog 根据文件名、自然语言或模型自由文本临时造标签。
+5. `metrics` 第一版只接受已声明的有限数值和短字符串；数值必须满足类型、范围、单位和缺失策略。由数值阈值生成的分类标签，其阈值同样写入 `output_contract`。
+6. 数据集级标签计数和指标分布由 Catalog 从样本事实汇总；展示契约可以携带预计算摘要，但登记时必须校验或重算，不能把手写摘要当唯一事实。
+7. 管线没有生成 `dataset-view.json` 时，Catalog 生成只按文件类型分类的默认视图，确保旧管线仍可展示和下载。
+8. 展示契约无效时不阻止已有可验证业务输出的 Run；数据集状态标记为 `partial`，另记 `presentation_health=degraded`，页面仍显示物理文件清单和契约错误。
+9. 第一版允许 `items` 内联几百条；同时规定上限。超过上限时升级为 `items.jsonl` + 游标分页，页面接口不变。
 
 `dataset-view.json` 的生产规则必须进入 Plan 的正式 `output_contract`，不能只靠每条管线自行约定。`output_contract` 至少声明：
 
@@ -215,6 +282,34 @@ DSH `DatasetCatalog` 依赖 `RunOutputPort` 读取 Run 状态、清单和展示�
 - 质量指标字段、数值范围和缺失策略；
 - JSONL 记录与媒体输出的关联键；
 - 展示契约输出位置和 schema 版本。
+
+### 4.4.1 与现有 Data-Juicer 输出兼容
+
+正式契约不得要求 Data-Juicer 改名或丢弃已有 JSON、JSONL、统计文件、图片、视频或模型附件。兼容层按以下顺序利用现有输出：
+
+1. Run 完成后，Publisher 对输出目录做 allowlist 分类，只把业务输出写入 `result-manifest.json`；日志、缓存、临时文件、运行私有状态和临时 ZIP 排除。
+2. 若 Plan 已声明 `output_contract`，Result View Builder 读取现有 JSON/JSONL 字段和媒体输出，生成 `dataset-view.json`，不重写原始业务文件。
+3. JSONL 中引用的绝对输入路径仅作为来源事实，不直接成为可预览资产；需要展示的媒体必须是 Run 输出中的相对文件，本机阶段复制/生成到 Run 输出，S3 阶段由 Publisher 上传为结果对象。
+4. 若同一样本已有多个输出文件，使用稳定 `sample_id` 合并，文件名只作为兼容回退，不作为长期身份。
+5. 没有 `output_contract` 的旧 Run 仍登记为基础/降级视图：可查看物理文件、JSON/JSONL 和下载，但不猜测样本标签、质量指标或媒体关系。
+
+因此现有 DJ 输出是业务事实来源，`result-manifest.json` 和 `dataset-view.json` 是非侵入式描述层，不会与现有文件冲突。
+
+### 4.4.2 Run 输出最终化顺序
+
+为避免“先写 manifest、后复制图片，导致 manifest 过期”，每个新 Run 必须按固定顺序最终化：
+
+```text
+DJ 算子完成
+  → 枚举候选业务输出
+  → Result View Builder 生成 dataset-view.json
+  → 校验所有 asset_path 都落在候选业务输出内
+  → 生成最终 result-manifest.json（包含 dataset-view，不包含 manifest 自身）
+  → 冻结输出并把 Run 写为终态
+  → 触发 Result Publication
+```
+
+最终 manifest 写入后不允许 Agent、页面或 Publisher 再向 Run 输出目录补文件或修改业务字节。任何必须复制的筛选图片、生成的蒙版或衍生预览都应属于 Plan/Result View Builder 的最终化阶段；若最终化后还需改变输出，必须创建新的 Run 或新的显式结果修订，而不是静默重写原结果。
 
 Plan 校验阶段检查声明，运行后 `RunOutputGateway` 检查实际输出。旧 Plan 没有 `output_contract` 时使用默认文件视图，因此可浏览和下载，但不会凭空出现质量分或标签。
 
@@ -249,6 +344,22 @@ Plan 校验阶段检查声明，运行后 `RunOutputGateway` 检查实际输出�
 - ZIP 缓存状态；
 - `storage_kind`、内部存储定位和 `storage_location_version`。
 
+Catalog 不保存图片、视频、完整 JSONL 或永久签名 URL。为避免当前 `assets_json` 随样本数膨胀，正式结构拆分为：
+
+```text
+datasets                    一次 Run 对应一个 Dataset Result
+dataset_samples             可分页、可按文件名和标签检索的样本
+dataset_assets              样本变体/文件角色、MIME、大小、hash、内部对象引用
+dataset_documents           JSON/JSONL、报告和模型附件
+dataset_label_definitions   稳定 key、显示名和来源 Plan
+dataset_sample_labels       样本与标签关系
+dataset_metrics             指标定义和有界索引值
+result_publications         发布状态、重试和幂等事实
+dataset_tombstones          删除后的最小审计事实
+```
+
+本机体验阶段继续使用 SQLite；GPU 服务器 + S3 部署阶段默认迁移到 PostgreSQL，以支持 Publisher、后台重试和多个 Web/Worker 进程并发。两者通过同一 CatalogStore interface 提供 Adapter，并运行同一契约测试；迁移只改变存储实现，不改变 `DatasetCatalog` interface 或不透明 ID。
+
 索引使用 DSH 已有 `storageDomain`，建立全局 `datasets` domain，而不是写入各工作区 `.dj/datasets/`。索引保存内部 `workspace_id` 和所有权，但任何公共响应都不返回本机路径或 S3 定位。
 
 启动时及定期 reconcile：
@@ -265,7 +376,7 @@ Plan 校验阶段检查声明，运行后 `RunOutputGateway` 检查实际输出�
 
 ### 5.1 浏览器可见的 DSH 同源接口
 
-新增独立插件 `@dsh-dj/datasets`，所有浏览器请求只访问：
+继续以独立插件 `@dsh-dj/datasets` 承载结果产品，所有浏览器请求只访问：
 
 ```text
 GET    /api/dj/datasets
@@ -355,27 +466,36 @@ DELETE /internal/run-outputs/{run_ref}
 
 ### 6.2 聊天摘要卡片
 
-`run_plan/get_run` 只增加不含宿主路径的 `result_ref`，例如 `task_id + plan_version + run_id`。Plan Flow 不生成 DSH 全局 ID。Host 使用当前服务器 `Principal`、会话 ID 和 `result_ref` 调用 `DatasetCatalog.registerRunResult()`；Catalog 校验会话、任务和 Run 归属并检查进入规则，按 origin key 幂等登记或复用。没有可登记结果时返回 `null`，聊天卡片继续显示运行状态或错误，但不显示“查看结果”。成功登记后返回页面使用的 `dataset_ref`：
+`run_plan/get_run` 只增加不含宿主路径的 `result_ref`，例如 `task_id + plan_version + run_id`。Plan Flow 不生成 DSH 全局 ID。Host 使用当前服务器 `Principal`、会话 ID 和 `result_ref` 调用 `ResultPublisher.publish()`；Publisher 经 RunOutputGateway 校验会话、任务、Run、业务输出和展示契约，再让 Catalog 按 origin key 幂等登记或复用。没有可登记结果时返回 `null`，聊天卡片继续显示运行状态或错误，但不显示“查看结果”。成功登记后返回页面使用的 `dataset_ref`：
 
 ```json
 {
+  "publication_id": "pub_...",
   "dataset_id": "ds_...",
-  "status": "succeeded",
+  "status": "available",
   "title": "筛选后的视频数据集",
   "record_count": 320,
   "file_count": 325,
   "total_bytes": 104857600,
-  "open_path": "/datasets/ds_..."
+  "open_path": "/results/ds_...",
+  "sample_open_path_template": "/results/ds_.../samples/{sample_id}"
 }
 ```
 
 浏览器不能自己构造 origin、所有者或存储位置；Host 从当前会话取得受控工作区，并让 `RunOutputGateway` 验证 `result_ref` 确实属于该工作区。历史 reconcile 和聊天登记同一个 origin 时必须得到同一个 `dataset_id` 和所有者，冲突时拒绝自动改写归属并记录审计。
 
-DSH 客户端为该结构注册专用摘要渲染器。第一版采用有界轮询而不是假设存在服务端推送：运行中每 2 秒查询，连续一分钟后降为每 5 秒；页面隐藏时暂停，恢复时立即刷新；到达终态后停止。卡片重新挂载、DSH 重启或打开历史会话时根据 `dataset_id` 恢复状态。符合进入规则的终态显示“查看结果”按钮。普通文本回复不负责拼宿主路径。
+DSH 客户端为该结构注册专用摘要渲染器。第一版采用有界轮询而不是假设存在服务端推送：运行中每 2 秒查询，连续一分钟后降为每 5 秒；页面隐藏时暂停，恢复时立即刷新；到达终态后继续轮询 Result Publication，依次显示“正在验证结果”“正在发布结果”“查看结果”或安全的发布失败提示。卡片重新挂载、DSH 重启或打开历史会话时根据 `publication_id/dataset_id` 恢复状态。符合进入规则且发布完成后显示“查看结果”按钮。普通文本回复不负责拼宿主路径。
 
 工具调用结束不代表后台 Run 已结束，因此验收必须覆盖 `starting → running → succeeded/failed/cancelled/lost` 的卡片更新，而不只测试一次终态 JSON 渲染。
 
-若当前 DSH 版本没有稳定的主区域路由注册接口，第一阶段用最大化 `shell.auxiliary` 实现独立详情视图，并用 `?dataset=<id>` 支持刷新恢复；不要通过 DOM 替换主内容区。等稳定路由 seam 可用后再切换 Adapter。
+深链接规范：
+
+```text
+/results/{dataset_id}
+/results/{dataset_id}/samples/{sample_id}
+```
+
+默认聊天按钮指向数据集详情；Agent 明确引用某条异常或代表样本时才携带 `sample_id`。路由解析后必须重新用当前 Session Cookie 鉴权；不可见、已删除或不存在的 ID 使用不泄露资源存在性的响应。链接允许复制、刷新、重新登录后回到原位置，并支持浏览器前进/后退。若当前 DSH 版本没有稳定的主区域路由注册接口，第一阶段使用最大化 `shell.auxiliary` 加 URL state Adapter 实现同样的公开路径语义；不要通过 DOM 替换主内容区，等稳定路由 seam 可用后只替换 Adapter。
 
 ### 6.3 数据集详情页
 
@@ -432,11 +552,26 @@ DSH 客户端为该结构注册专用摘要渲染器。第一版采用有界轮�
 - 输出和缓存总大小；
 - 删除不可恢复提示。
 
-删除请求携带 Catalog 最近观察到的 manifest hash。Catalog 再次校验所有权或管理员角色。删除顺序：先原子标记 `deleting`，阻止新预览和归档；等待活跃读取结束；再次验证精确 Run、存储定位和 manifest hash；通过当前 `ObjectCatalog` Adapter 删除输出、缩略图与 ZIP 缓存；最后原子写入包含原所有者的 tombstone。重复删除幂等。普通列表移除已删除项；管理员审计视图可查看最小删除记录，但不能再读取文件。
+删除请求携带 Catalog 最近观察到的 manifest hash。Catalog 再次校验所有权或管理员角色。删除顺序：先原子标记 `deleting` 并写删除任务，立即阻止新预览和归档；等待活跃读取结束；再次验证精确 Run、存储定位和 manifest hash；通过当前 `ObjectCatalog` Adapter 删除输出、缩略图与 ZIP 缓存；最后原子写入包含原所有者的 tombstone。重复删除幂等。本机或 S3 删除暂时失败时保持 `deleting` 并后台重试，不恢复普通用户访问，也不谎报物理字节已清除；管理员可见失败原因和重试状态。普通列表移除已删除项；管理员审计视图可查看最小删除记录，但不能再读取文件。
 
 第一版不删除 Plan、运行审计、会话消息和必要的脱敏错误摘要。后续若需要彻底删除，再增加独立的审计策略。
 
 ## 8. 存储容量策略
+
+### 8.1 本机与 GPU 服务器 + S3 的一致接口和不同实现
+
+| 环节 | 本机体验环境 | GPU 服务器 + S3 |
+|---|---|---|
+| Run 执行 | 本机 `local-process` 或显式 Broker | GPU Worker；执行模式与结果存储解耦 |
+| Run 临时输出 | 受控本机 Run 目录 | Worker 临时目录 |
+| 发布动作 | 校验后记录受控本机定位，不复制第二份业务字节 | 上传私有 staging 前缀，逐对象校验后原子提交存储定位 |
+| 结果字节 | LocalRunOutputAdapter 读取 Run 目录 | S3 Adapter 读取 `users/{user_id}/results/{dataset_id}/...` |
+| Catalog | SQLite，单进程体验 | PostgreSQL，支持 Publisher/后台任务/Web 多进程并发 |
+| 浏览器访问 | DSH 鉴权后流式读取本机文件 | DSH 鉴权后流式代理，或生成短期、最小权限签名 URL |
+| 公开身份 | `dataset_id`、`sample_id`、`asset_id` | 完全相同 |
+| 删除 | tombstone 后删除精确 Run 输出和缓存 | tombstone 后批量删除精确对象版本和缓存，失败重试 |
+
+S3 Bucket、region、endpoint 和用户前缀都是 Adapter 配置，不进入 Plan、聊天消息或浏览器响应。S3 对象键是内部定位，不是稳定身份；迁移 Bucket 或前缀时只更新 `storage_location_version`。本机已有结果不因开启 S3 自动移动，必须通过显式“复制 → hash 校验 → 切换定位 → 删除旧字节”迁移任务。
 
 用户选择长期积累，因此第一版不做自动过期，但必须提供：
 
@@ -458,6 +593,7 @@ DSH 客户端为该结构注册专用摘要渲染器。第一版采用有界轮�
 D:\dj\data-juicer-1.5.4\data_juicer\tools\plan_flow\
 ├─ run_output_gateway.py       # RunOutputGateway 深模块
 ├─ run_output_schema.py        # dataset-view/output-contract 与稳定错误码
+├─ result_view_builder.py      # 适配现有 JSON/JSONL/媒体输出，生成展示契约
 ├─ run_output_archive.py       # ZIP 任务、锁与缓存限额
 ├─ run_output_json.py          # JSON/JSONL 有界读取与分页
 ├─ dataset_artifacts.py        # 保留物理清单；增加展示契约验证
@@ -476,9 +612,14 @@ D:\dsh-app\packages\dsh-dj-datasets\
 ├─ README.md
 └─ lib\
    ├─ index.js                 # DatasetCatalog、所有权索引、权限和 Host 路由
+   ├─ result-publisher.js      # Run 终态发布、幂等、重试和补偿
+   ├─ catalog-store.js         # SQLite/PostgreSQL 共用的 CatalogStore interface
+   ├─ catalog-store-sqlite.js  # 本机 Adapter
+   ├─ catalog-store-postgres.js # GPU 服务器 Adapter
    ├─ run-output-http.js       # RunOutputPort 的 loopback HTTP Adapter
    ├─ local-object-catalog.js  # 当前本机结果 ObjectCatalog Adapter
    ├─ s3-object-catalog.js     # 后续服务器 S3 Adapter
+   ├─ result-routes.js         # 可刷新/可复制的数据集与样本深链接 Adapter
    └─ client.js                # 左侧入口、列表、详情、聊天摘要渲染
 ```
 
@@ -495,57 +636,64 @@ D:\dsh-app\packages\dsh-dj-datasets\
 
 ## 10. 分阶段实施
 
-### 阶段 A：结果契约与 RunOutputGateway
+### 阶段 A：收敛输出契约并兼容现有 DJ 文件
 
-1. 定义 Plan `output_contract`、`dataset-view` schema、默认适配和错误码。
-2. 实现历史 Run 枚举、进入规则以及成功/部分完成状态读取。
-3. 实现 manifest 验证、安全 asset 映射和分页项目查询。
-4. 实现受信 loopback 路由和内部凭据。
+1. 固化 `Business Output` allowlist、`result-manifest` v1 和 `dataset-view` v1 schema。
+2. 在 Plan `output_contract` 中声明样本键、媒体字段、文件角色、稳定标签 key/显示名、指标范围和缺失策略。
+3. 实现 Result View Builder，直接利用现有 JSON、JSONL、stats 和媒体输出生成展示契约，不改名、不覆盖业务文件。
+4. 对 JSONL 中的绝对输入路径执行明确策略：只保留来源事实；需要展示的媒体必须复制/生成到 Run 业务输出。
+5. 保留旧 Run 默认文件视图和 `degraded` 回退。
 
-完成标准：已有 P7 图片输出和视频 fixture 能被枚举；失败、无输出 Run 不登记；无报错且有可验证输出的取消 Run 登记为部分完成；旧结果没有展示契约时仍能按文件清单读取；浏览器无法直接访问内部路由。
+完成标准：白衣筛选、人脸蒙版、视频 + JSONL 三类真实 Run 不经人工补文件即可生成合法清单；同一样本的多个变体按 `sample_id` 合并；标签、角色、指标互不混淆；旧 Run 仍可浏览下载。
 
-### 阶段 B：DSH DatasetCatalog 与历史导入
+### 阶段 B：事件驱动 Result Publication 与正式 Catalog
 
-1. 建立带 `owner_user_id`、存储定位版本和全局随机 `dataset_id` 的 DSH storage domain。
-2. 注入 `IdentityAccess`、请求 `Principal` 和 `WorkspaceRegistry`，实现所有权查询。
-3. 实现 `RunOutputPort` HTTP Adapter 与内存测试 Adapter。
-4. 先报告、后事务迁移历史 Run 到首个管理员；实现 `unclaimed`、增量 reconcile、origin 唯一约束和带所有者 tombstone。
+1. 实现 `ResultPublisher`，由 Run 终态主动触发验证、发布和登记；历史扫描降为恢复兜底。
+2. 增加 `result_publications` 状态与幂等唯一键，支持重试、重启恢复和安全错误码。
+3. 把当前 SQLite `assets_json` 拆成 datasets/samples/assets/documents/labels/metrics 表，并完成幂等迁移。
+4. 保留现有 `IdentityAccess` 所有权校验、全局随机 ID、历史管理员归属、`unclaimed` 和 tombstone。
+5. 提供 SQLite 与内存 CatalogStore Adapter 契约测试，为 PostgreSQL Adapter 固定 interface。
 
-完成标准：普通用户只能看到自己的结果；管理员可管理全部和 `unclaimed`；上线前历史结果安全归属；不同工作区相同 task/run 不冲突；所有公共结构不含宿主路径、S3 Key 或 `ownerUserId` 输入。
+完成标准：一个全新本机 Run 从终态到结果中心全程无需打开页面触发、无需人工复制或手工登记；重复通知只产生一个 dataset；普通用户只能看到自己的结果；公共结构不含路径或 S3 Key。
 
-### 阶段 C：安全媒体、JSON/JSONL 与页面
+### 阶段 C：聊天发布状态和持久深链接
 
-1. 实现 Host 同源路由、asset 流和视频 Range。
-2. 实现 JSON 格式化上限、JSONL 分页索引和按需缩略图。
-3. 在“算子库”下方、“工作区”上方注册左侧“结果中心”入口，实现用户私有列表、详情、图表与筛选；管理员增加跨用户视图。
-4. 接入聊天摘要的有界轮询和“查看结果”按钮。
+1. 聊天卡片渲染 `validating → publishing → available/retryable_failure`。
+2. 实现 `/results/{dataset_id}` 和 `/results/{dataset_id}/samples/{sample_id}` URL state/router Adapter。
+3. 默认按钮进入数据集详情；结构化回复引用具体样本时可进入样本详情。
+4. 支持复制链接、刷新、重新登录、浏览器前进/后退和无权访问响应。
+5. 保留左侧“结果中心”入口，并确保它与聊天链接打开同一 Catalog 事实。
 
-完成标准：运行管线后聊天卡片能从运行中自动更新到终态；按钮和左侧入口打开同一数据集；浏览器可查看图片、播放视频、分页查看 JSONL。
+完成标准：运行结束后聊天自动出现“查看结果”；复制链接到新标签页并登录后仍进入同一详情；用户 A 的链接对用户 B 不泄露资源存在性。
 
-### 阶段 D：下载、ZIP 与删除
+### 阶段 D：补齐预览、下载和可恢复删除
 
-1. 单文件下载。
-2. 全量 ZIP 和勾选 ZIP。
-3. 归档进度、缓存和失败恢复。
-4. 所有者/管理员删除、管理员二次确认、并发锁、tombstone 和按用户空间统计。
+1. 保留并加固现有图片、样本变体、视频 Range、JSON/JSONL、筛选和分页能力。
+2. 实现缩略图与 JSONL 偏移索引上限。
+3. 完成全量业务输出 ZIP、勾选样本 ZIP、归档进度、缓存和失败恢复。
+4. 将删除改为任务化 `deleting → tombstone`，Local/S3 删除失败后台重试。
+5. 完成普通用户/管理员占用统计和管理员删除审计。
 
-完成标准：几百条混合输出可以稳定下载；普通用户只能删除自己的结果；管理员可删除任意用户结果；删除后所有媒体和归档接口均不可用，且不会误删其他 Run。
+完成标准：几百条混合输出可稳定预览和下载；`下载全部` 不含日志/缓存；删除后所有媒体和归档接口不可用，重试不会误删其他 Run。
 
-### 阶段 E：容量与真实端到端验证
+### 阶段 E：本机真实端到端与容量验证
 
-1. 总占用和磁盘告警。
-2. 图片、视频、JSONL、部分完成和无输出失败 Run 的真实测试数据。
-3. 穿透环境下验证大文件流、断线和恢复。
-4. 验证 DSH/MCP 重启后历史导入、索引和未完成归档 reconcile。
+1. 使用图片筛选、蒙版多变体、视频 + JSONL、部分完成、无输出失败 Run 做真实测试。
+2. 验证 DSH/MCP 重启后 publication、历史导入、索引、删除和归档恢复。
+3. 验证穿透环境下大文件流、断线恢复和本机容量软/硬阈值。
+4. 清除当前仅用于原型导入或人工补 `dataset-view` 的路径，确保正常链路只有一个发布入口。
 
-### 阶段 F：GPU 服务器与 S3 Adapter
+完成标准：至少连续运行三次真实新任务，均无需人工介入自动进入当前用户结果中心，聊天深链接可用，失败/无输出不会误登记。
 
-1. 实现 `ObjectCatalog` S3 Adapter，结果写入配置的用户结果前缀。
-2. 保存 `storage_location_version`，支持本机旧结果与 S3 新结果并行读取。
-3. 提供“复制 → 校验 hash → 更新定位 → 删除旧对象”的显式迁移任务，不因修改配置自动移动旧数据。
-4. 验证短期签名 URL、Range、ZIP、删除、IAM 最小权限和备份恢复。
+### 阶段 F：GPU 服务器、PostgreSQL 与 S3 Adapter
 
-完成标准：页面接口和 `dataset_id` 不变；用户只能访问自己的 S3 结果；管理员可管理全部；Bucket、前缀或部署机器变化不需要修改业务代码。
+1. 实现 PostgreSQL CatalogStore Adapter，并从 SQLite 做可审计迁移。
+2. 实现 S3 ObjectCatalog Adapter：上传私有 staging、逐对象 hash/size 校验、原子提交存储定位。
+3. 保存 `storage_location_version`，支持本机旧结果与 S3 新结果并行读取。
+4. 提供“复制 → 校验 hash → 更新定位 → 删除旧对象”的显式迁移任务，不因修改配置自动移动旧数据。
+5. 验证短期签名 URL、Range、ZIP、异步删除重试、IAM 最小权限、配额、备份和恢复。
+
+完成标准：页面、聊天深链接和所有不透明 ID 不变；只有发布完成的 S3 结果可见；用户只能访问自己的对象；Bucket、前缀或部署机器变化不需要修改业务代码。
 
 ## 11. 测试策略
 
@@ -554,12 +702,17 @@ D:\dsh-app\packages\dsh-dj-datasets\
 ### 契约测试
 
 - 合法/非法 `dataset-view.json`；
+- 现有 DJ JSON/JSONL/stats/媒体文件在构建展示契约前后 hash 不变；
+- 绝对输入路径不成为可预览 asset，复制到 Run 输出后的相对业务文件可以进入；
+- 稳定标签 key 正确解析中文显示名，阈值映射可复现；文件角色和运行状态不会出现在样本标签筛选；
+- 样本级事实能够重算数据集级标签计数和指标摘要，伪造摘要被拒绝或覆盖；
 - 旧 Run 默认视图；
 - 标签、文件名、文件类型筛选；
 - 稳定分页和排序；
 - succeeded/partial 状态映射以及 failed/无输出排除规则；
 - 跨工作区历史导入、origin 幂等和全局 ID 唯一性；
 - degraded 回退。
+- Result Publication 重复通知、进程重启、发布失败重试和 origin 幂等。
 
 ### 安全测试
 
@@ -581,6 +734,8 @@ D:\dsh-app\packages\dsh-dj-datasets\
 - 处理中到成功的状态更新；
 - 页面隐藏、恢复、历史会话重挂载和重启后的卡片状态恢复；
 - 聊天按钮与左侧列表指向同一数据集；
+- `/results/{dataset_id}` 与样本深链接支持复制、刷新、重新登录及前进/后退；
+- `validating/publishing` 阶段不提前显示可用结果，完成后按钮原位更新；
 - 左侧顶部顺序稳定为“记忆系统 → 算子库 → 结果中心 → 工作区”，折叠和刷新后位置不漂移；
 - 图片懒加载和视频 Range；
 - JSONL 分页、搜索；
@@ -599,6 +754,8 @@ D:\dsh-app\packages\dsh-dj-datasets\
 
 另使用普通用户 A、普通用户 B 和管理员验证所有资源接口隔离；使用两个不同运行验证每次运行产生独立结果；使用至少一个认证前历史 Run 验证归属迁移和 `unclaimed`。
 
+本机验收必须从创建新 Plan/Run 开始，禁止预先手写 `dataset-view.json`、复制样本到结果目录或直接调用 Catalog 登记；只有这样才能证明自动链路成立。S3 验收还必须注入“部分对象上传成功后断线”，确认 staging 不可见、重试幂等、最终 available 后聊天链接和本机阶段格式完全一致。
+
 ## 12. 分阶段验收标准
 
 1. 左侧“结果中心”紧接“算子库”下方并位于“工作区”上方；普通用户只看到自己的输出结果，管理员可进入明确标识的跨用户管理视图。
@@ -616,6 +773,10 @@ D:\dsh-app\packages\dsh-dj-datasets\
 13. 没有 `dataset-view.json` 的旧管线输出仍可基本浏览和下载。
 14. 有 `output_contract` 的管线能稳定展示标签、质量指标和媒体关联。
 15. 阶段 F 完成后，从本机切换到 S3 时页面接口和不透明资源 ID 不变，Bucket 和前缀可配置。
+16. 新 Run 终态主动触发 Result Publication，不依赖用户打开结果中心或扫描最近对话；发布中聊天显示进度，发布成功后自动出现可刷新、可复制的详情链接。
+17. 现有 DJ 业务输出保持原文件名和内容；展示契约只引用或解释它们，不覆盖原始 JSON/JSONL、媒体或模型附件。
+18. 样本标签、文件角色、质量指标和运行状态在 schema、筛选和页面上保持独立；标签规则来自 Plan `output_contract`，页面不猜测。
+19. S3 上传未完整校验时结果不对普通用户可见；删除失败保持不可访问并后台重试，管理员能看到状态。
 
 ## 13. 明确不在第一版范围内
 
