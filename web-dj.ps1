@@ -3,6 +3,8 @@ param(
     [int]$Port = 57035,
     [ValidateRange(1, 65535)]
     [int]$McpPort = 8010,
+    [ValidateSet('native', 'broker')]
+    [string]$ExecutionMode = 'native',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$DshArgs
 )
@@ -261,6 +263,7 @@ if (-not (Test-TcpPort -TargetPort $McpPort)) {
         PYTHONUTF8 = '1'
         PYTHONIOENCODING = 'utf-8'
         DJ_PLAN_FLOW_CONFIG_FILE = $mcpEnvFile
+        DJ_PLAN_FLOW_EXECUTION_MODE = $ExecutionMode
         DSH_DJ_INTERNAL_TOKEN = $internalToken
     }
     $allowedMcpEnvironmentNames = @(
