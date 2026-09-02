@@ -22,6 +22,11 @@ case "$DJ_EXECUTION_MODE" in
   native|broker) ;;
   *) echo "DJ_EXECUTION_MODE must be native or broker" >&2; exit 2 ;;
 esac
+if [[ "$DSH_HOST" != "127.0.0.1" ]]; then
+  echo "DSH only supports DSH_HOST=127.0.0.1 because it exposes code-execution capabilities." >&2
+  echo "Keep it on loopback and use an SSH tunnel or the platform's authenticated port forwarding." >&2
+  exit 2
+fi
 
 for path in "$DSH_BIN" "$DJ_PYTHON" "$PATCH_TEMPLATE"; do
   if [[ ! -f "$path" ]]; then
