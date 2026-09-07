@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.example/dj-pipeline-planning-v1/case.schema.json",
+  "title": "Data-Juicer pipeline planning benchmark case",
+  "type": "object",
+  "required": ["case_id", "title", "modality", "reachability", "difficulty", "task_prompt", "input_profile", "acceptance_criteria", "gold"],
+  "properties": {
+    "case_id": {"type": "string", "pattern": "^(TXT|IMG)-(R|U)-(L|M|H)$"},
+    "title": {"type": "string", "minLength": 1},
+    "modality": {"enum": ["text", "image"]},
+    "reachability": {"enum": ["reachable", "unreachable"]},
+    "difficulty": {"enum": ["low", "medium", "high"]},
+    "task_prompt": {"type": "string", "minLength": 20},
+    "input_profile": {
+      "type": "object",
+      "required": ["format", "records", "unit", "fields", "fixture_ids"],
+      "properties": {
+        "records": {"type": "integer", "minimum": 1},
+        "fields": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "fixture_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "hard", "metric", "operator", "value"],
+        "properties": {
+          "hard": {"type": "boolean"},
+          "operator": {"enum": ["eq", "gte", "lte"]}
+        }
+      }
+    },
+    "gold": {
+      "type": "object",
+      "required": ["atomic_capabilities", "operator_candidates", "order_constraints", "capability_gaps", "forbidden_substitutions", "expected_behavior"],
+      "properties": {
+        "atomic_capabilities": {"type": "array", "minItems": 1},
+        "operator_candidates": {"type": "array"},
+        "capability_gaps": {"type": "array"},
+        "forbidden_substitutions": {"type": "array"},
+        "expected_behavior": {"type": "array", "minItems": 1}
+      }
+    }
+  },
+  "additionalProperties": true
+}

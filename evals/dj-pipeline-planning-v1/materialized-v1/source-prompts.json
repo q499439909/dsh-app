@@ -1,0 +1,39 @@
+{
+  "generation_mode": "built-in image generation tool",
+  "generated_at": "2026-09-02",
+  "sources": [
+    {
+      "file": "sources/still-life.png",
+      "prompt": "Create a clean, photorealistic studio still life for a machine-learning image fixture: a matte teal ceramic vase, one yellow sunflower, a folded beige linen cloth, and a small dark-blue book on a pale gray tabletop. Single coherent scene, one image only, square composition, natural soft window light, sharp focus, high aesthetic quality. No people, no faces, no text, no logos, no watermark, no collage, no border."
+    },
+    {
+      "file": "sources/portrait.png",
+      "prompt": "Create a privacy-safe photorealistic head-and-shoulders portrait of one fictional adult East Asian woman, approximately age 30, neutral friendly expression, looking at camera, centered face clearly visible, plain light-gray studio background, even soft light, sharp focus, natural skin texture. Exactly one person and one face. No text, no logo, no watermark, no collage, no border. Square composition."
+    },
+    {
+      "file": "sources/group-three.png",
+      "prompt": "Create a privacy-safe photorealistic group portrait of exactly three fictional adults, all clearly visible from chest up, three distinct faces at similar scale, standing side-by-side against a plain neutral studio background, even soft light, sharp focus. All subjects are adults. No extra people, no text, no logo, no watermark, no collage, no border. Landscape composition."
+    },
+    {
+      "file": "sources/alpine-lake.png",
+      "prompt": "Create a photorealistic alpine landscape: a narrow turquoise lake below rugged mountains with a tiny red hiking shelter near the shore, overcast soft daylight, rich natural detail, high aesthetic quality, no people, no faces. One coherent scene only. No text, no logo, no watermark, no collage, no border. Landscape composition."
+    },
+    {
+      "file": "sources/adult-swimwear-safety-proxy.png",
+      "prompt": "Create a privacy-safe photorealistic editorial beach portrait of one fictional adult woman, clearly over age 25, wearing ordinary one-piece swimwear with a light linen cover-up, standing on a public beach in daylight. Non-explicit, non-sexual pose, no nudity, no minors. Exactly one person and one face. No text, no logo, no watermark, no collage, no border. Square composition. This is a benign safety-filter calibration image."
+    },
+    {
+      "file": "sources/cargo-bicycle.png",
+      "prompt": "Create a photorealistic long-tail subject image for an image-text dataset: a vintage green cargo bicycle with a woven front basket parked beside a pale yellow wall, a small potted rosemary plant next to the rear wheel, soft morning light, crisp detail, high aesthetic quality. No people, no faces, no text, no logos, no watermark, no collage, no border. Landscape composition."
+    },
+    {
+      "file": "sources/cat-suitcase.png",
+      "prompt": "Create a photorealistic long-tail subject image for an image-text dataset: one orange tabby cat sleeping curled inside an open weathered blue suitcase on a wooden floor, a striped wool scarf draped over one corner, warm window light, crisp detail, high aesthetic quality. No people, no text, no logos, no watermark, no collage, no border. Square composition."
+    },
+    {
+      "file": "sources/dog-left-chair-right.png",
+      "prompt": "Create a photorealistic scene with a precise spatial relationship for an image-text matching benchmark: one medium-sized black dog sits on the LEFT side of one bright red wooden chair; the chair is on the RIGHT side of the dog. Both objects fully visible against a plain cream studio wall and light wood floor. No other animals or furniture. No text, no logo, no watermark, no collage, no border. Landscape composition."
+    }
+  ]
+}
+

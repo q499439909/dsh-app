@@ -1,5 +1,5 @@
 export const name = "dj-operator-library";
-export const inject = ["webServer"];
+export const inject = ["webServer", "identityAccess"];
 
 const DEFAULT_CATALOG_URL = "http://127.0.0.1:8010/operator-catalog";
 const CATALOG_ROUTE_PATH = "/api/dj/operator-catalog";
@@ -39,7 +39,8 @@ export function apply(ctx, config = {}) {
   async function proxyJson(res, upstreamUrl, validate) {
     try {
       const upstream = await fetch(upstreamUrl, {
-        headers: { accept: "application/json" },
+        headers: { accept: "application/json", "x-dsh-internal-token": process.env.DSH_DJ_INTERNAL_TOKEN || "",
+          "x-dsh-user-id": ctx.identityAccess?.currentPrincipal()?.userId || "" },
         signal: AbortSignal.timeout(timeoutMs),
       });
       const declaredLength = Number(upstream.headers.get("content-length") || 0);
@@ -95,7 +96,7 @@ export function apply(ctx, config = {}) {
         await proxyJson(
           res,
           upstreamUrl,
-          payload => payload && typeof payload.ok === "boolean" && (payload.ok === false || payload.operator?.name === name),
+          payload => payload && typeof payload.ok === "boolean" && (payload.ok === false || payload.operator?.name === name || payload.operator?.candidate_id === name),
         );
       },
     }),

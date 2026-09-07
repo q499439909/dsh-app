@@ -1,0 +1,104 @@
+{
+  "case_id": "IMG-R-H",
+  "oracle_type": "mixed_deterministic_and_semantic_strata",
+  "expected_record_count": 14,
+  "expected_duplicate_clusters": {
+    "portrait-cluster-1": [
+      "duplicate-portrait-a",
+      "duplicate-portrait-b"
+    ]
+  },
+  "caption_mismatch_explanation": "The image shows dog LEFT of chair; the caption claims chair LEFT of dog while retaining the same nouns.",
+  "expected_final_subjects_after_keep_one_and_tagging": [
+    "alpine_lake",
+    "still_life",
+    "cargo_bicycle",
+    "cat_in_suitcase",
+    "adult_portrait",
+    "adult_group_portrait"
+  ],
+  "expected_max_subject_ratio": 0.166667,
+  "important": [
+    "Run cheap geometry and subplot checks before watermark/aesthetic/alignment models.",
+    "nsfw-proxy is deliberately non-explicit and is a runtime calibration probe.",
+    "Model-derived scores are not baked into gold; record actual scores and calibrate thresholds on this canary set."
+  ],
+  "records": [
+    {
+      "id": "good-alpine-lake",
+      "gold_decision": "keep",
+      "deletion_reason": null
+    },
+    {
+      "id": "good-vase-sunflower",
+      "gold_decision": "keep",
+      "deletion_reason": null
+    },
+    {
+      "id": "good-cargo-bicycle",
+      "gold_decision": "keep",
+      "deletion_reason": null
+    },
+    {
+      "id": "good-cat-suitcase",
+      "gold_decision": "keep",
+      "deletion_reason": null
+    },
+    {
+      "id": "undersized",
+      "gold_decision": "drop",
+      "deletion_reason": "minimum_dimension"
+    },
+    {
+      "id": "extreme-aspect",
+      "gold_decision": "drop",
+      "deletion_reason": "extreme_aspect_ratio"
+    },
+    {
+      "id": "subplot",
+      "gold_decision": "drop",
+      "deletion_reason": "subplot"
+    },
+    {
+      "id": "nsfw-proxy",
+      "gold_decision": "drop",
+      "deletion_reason": "nsfw_threshold_runtime_dependent",
+      "safety_fixture": "benign non-explicit proxy"
+    },
+    {
+      "id": "watermark",
+      "gold_decision": "drop",
+      "deletion_reason": "watermark"
+    },
+    {
+      "id": "low-aesthetic",
+      "gold_decision": "drop",
+      "deletion_reason": "low_aesthetic"
+    },
+    {
+      "id": "duplicate-portrait-a",
+      "gold_decision": "keep_one",
+      "deletion_reason": null,
+      "duplicate_cluster_gold": "portrait-cluster-1"
+    },
+    {
+      "id": "duplicate-portrait-b",
+      "gold_decision": "keep_one",
+      "deletion_reason": null,
+      "duplicate_cluster_gold": "portrait-cluster-1",
+      "near_duplicate_transform": "1.2% crop + 1.5% contrast + JPEG"
+    },
+    {
+      "id": "caption-hard-mismatch",
+      "gold_decision": "drop",
+      "deletion_reason": "caption_spatial_relation_mismatch",
+      "visual_relation_gold": "dog_left_of_chair"
+    },
+    {
+      "id": "missing-tag",
+      "gold_decision": "keep_and_tag",
+      "deletion_reason": null,
+      "generated_subject_gold": "adult_group_portrait"
+    }
+  ]
+}

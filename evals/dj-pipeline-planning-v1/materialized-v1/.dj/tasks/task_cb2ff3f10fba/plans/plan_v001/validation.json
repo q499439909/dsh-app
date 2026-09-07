@@ -1,0 +1,11 @@
+{
+  "errors": [
+    {
+      "code": "INVALID_POSTPROCESS",
+      "message": "Only kind=python postprocess steps are supported",
+      "path": "postprocess[0]"
+    }
+  ],
+  "ok": false,
+  "warnings": []
+}

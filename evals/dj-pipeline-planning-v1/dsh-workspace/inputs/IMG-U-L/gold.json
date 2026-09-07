@@ -1,0 +1,136 @@
+{
+  "case_id": "IMG-U-L",
+  "oracle_type": "deterministic_exif_orientation_and_metadata",
+  "validation": {
+    "orientation": "Every output must be stored upright with no Orientation tag.",
+    "metadata": "EXIF, GPS, camera/device, software, comment, XMP and ICC metadata must be absent.",
+    "pixels": "Compare output to the input after its EXIF display transform: dimensions and full frame must match, max per-channel decoded error must be <= 4 and RGB RMSE <= 0.5. This tolerance only covers IDCT rounding after a lossless JPEG coefficient transform; resizing, cropping, color adjustment and lossy re-encoding remain forbidden.",
+    "decoded_pixel_tolerance": {
+      "max_channel_absolute_error": 4,
+      "rgb_rmse": 0.5
+    }
+  },
+  "implementation_note": "A lossless JPEG coefficient transform such as jpegtran is acceptable. Exact decoded RGB equality is not required because rotated DCT blocks can differ by a few IDCT rounding levels; ordinary Pillow decode/transpose/save should still exceed the stated tolerance because it re-encodes JPEG data.",
+  "records": [
+    {
+      "id": "orientation-1",
+      "input_orientation": 1,
+      "input_has_gps": true,
+      "input_raw_size": [
+        640,
+        480
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "5a1c51a07b3285db03c655c8f0cd1c86c0c1429c2376ad73ac656a36f6448ddd",
+      "expected_metadata_residual_count": 0
+    },
+    {
+      "id": "orientation-2",
+      "input_orientation": 2,
+      "input_has_gps": false,
+      "input_raw_size": [
+        640,
+        480
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "17cc6161f1344e675354988cba9703549d911a2a9231166637ecdda04d9abce1",
+      "expected_metadata_residual_count": 0
+    },
+    {
+      "id": "orientation-3",
+      "input_orientation": 3,
+      "input_has_gps": true,
+      "input_raw_size": [
+        640,
+        480
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "17cc6161f1344e675354988cba9703549d911a2a9231166637ecdda04d9abce1",
+      "expected_metadata_residual_count": 0
+    },
+    {
+      "id": "orientation-4",
+      "input_orientation": 4,
+      "input_has_gps": false,
+      "input_raw_size": [
+        640,
+        480
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "5a1c51a07b3285db03c655c8f0cd1c86c0c1429c2376ad73ac656a36f6448ddd",
+      "expected_metadata_residual_count": 0
+    },
+    {
+      "id": "orientation-5",
+      "input_orientation": 5,
+      "input_has_gps": true,
+      "input_raw_size": [
+        480,
+        640
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "89d1297d5ce7c5b93876987f107506c761e439bb25bad3673e8fdbee3889f106",
+      "expected_metadata_residual_count": 0
+    },
+    {
+      "id": "orientation-6",
+      "input_orientation": 6,
+      "input_has_gps": true,
+      "input_raw_size": [
+        480,
+        640
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "89d1297d5ce7c5b93876987f107506c761e439bb25bad3673e8fdbee3889f106",
+      "expected_metadata_residual_count": 0
+    },
+    {
+      "id": "orientation-7",
+      "input_orientation": 7,
+      "input_has_gps": false,
+      "input_raw_size": [
+        480,
+        640
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "0262a7513fe0da0c747b6ae858d2a5c7a473384183408d7a5d8dd8443da47e4a",
+      "expected_metadata_residual_count": 0
+    },
+    {
+      "id": "orientation-8",
+      "input_orientation": 8,
+      "input_has_gps": true,
+      "input_raw_size": [
+        480,
+        640
+      ],
+      "expected_output_size": [
+        640,
+        480
+      ],
+      "expected_display_pixel_sha256": "0262a7513fe0da0c747b6ae858d2a5c7a473384183408d7a5d8dd8443da47e4a",
+      "expected_metadata_residual_count": 0
+    }
+  ]
+}

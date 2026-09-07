@@ -1,5 +1,5 @@
 export const name = "dj-plan-explorer";
-export const inject = ["webServer"];
+export const inject = ["webServer", "identityAccess"];
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8010";
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -42,7 +42,8 @@ export function apply(ctx, config = {}) {
             const upstream = new URL(`/${route}`, baseUrl);
             for (const [key, value] of incoming.searchParams) upstream.searchParams.append(key, value);
             const response = await fetch(upstream, {
-              headers: { accept: "application/json" },
+              headers: { accept: "application/json", "x-dsh-internal-token": process.env.DSH_DJ_INTERNAL_TOKEN || "",
+                "x-dsh-user-id": ctx.identityAccess?.currentPrincipal()?.userId || "" },
               signal: AbortSignal.timeout(timeoutMs),
             });
             const declaredLength = Number(response.headers.get("content-length") || 0);

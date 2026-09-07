@@ -15,6 +15,9 @@ $djRoot = 'D:\dj\data-juicer-1.5.4'
 $dshBin = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh\lib\bin.js'
 $patchFile = Join-Path $dshRoot 'dj-dsh.patch.yml'
 $pythonExe = 'D:\dj\.envs\dsh-dj\python.exe'
+$runtimeProbe = Join-Path $dshRoot 'scripts\test-dj-runtime.ps1'
+$hfScripts = 'D:\dj\.envs\dsh-dj\Scripts'
+$hfHome = 'D:\shishi\.cache\huggingface'
 $mcpTempDir = Join-Path $djRoot '.mcp-tmp'
 $mcpEnvFile = Join-Path $dshRoot 'dj-plan-flow.env'
 $authEnvFile = Join-Path $dshRoot 'dsh-auth.env'
@@ -22,12 +25,16 @@ $operatorPluginSource = Join-Path $dshRoot 'packages\dsh-dj-operator-library'
 $planPluginSource = Join-Path $dshRoot 'packages\dsh-dj-plan-explorer'
 $authPluginSource = Join-Path $dshRoot 'packages\dsh-user-auth'
 $datasetPluginSource = Join-Path $dshRoot 'packages\dsh-dj-datasets'
+$webFetchPluginSource = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh-web-fetch-http'
 $internalTokenPath = Join-Path $dshRoot '.dsh\dj-internal-token'
 $dshProfileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\profiles\web'
+$proxyUrl = 'http://127.0.0.1:15236'
+$noProxy = '127.0.0.1,localhost,::1'
 $operatorPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\operator-library'
 $planPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\plan-explorer'
 $authPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\user-auth'
 $datasetPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\datasets'
+$webFetchPluginLink = Join-Path $dshProfileRoot 'node_modules\@deepseek-ai\dsh-web-fetch-http'
 
 function Read-DotEnv {
     param([string]$Path)
@@ -68,6 +75,14 @@ if (-not (Test-Path -LiteralPath $dshBin)) {
 if (-not (Test-Path -LiteralPath $pythonExe)) {
     throw "Cannot find the Data-Juicer Python environment: $pythonExe"
 }
+if (-not (Test-Path -LiteralPath $runtimeProbe -PathType Leaf)) {
+    throw "Cannot find the Data-Juicer runtime probe: $runtimeProbe"
+}
+$runtimeProbeOutput = @(& $runtimeProbe -PythonExe $pythonExe 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw "The Data-Juicer Python environment is unhealthy.`n$($runtimeProbeOutput -join [Environment]::NewLine)"
+}
+$runtimeProbeOutput | ForEach-Object { Write-Host $_ }
 if (-not (Test-Path -LiteralPath $operatorPluginSource -PathType Container)) {
     throw "Cannot find the DSH operator library plugin: $operatorPluginSource"
 }
@@ -79,6 +94,9 @@ if (-not (Test-Path -LiteralPath $authPluginSource -PathType Container)) {
 }
 if (-not (Test-Path -LiteralPath $datasetPluginSource -PathType Container)) {
     throw "Cannot find the DSH result center plugin: $datasetPluginSource"
+}
+if (-not (Test-Path -LiteralPath $webFetchPluginSource -PathType Container)) {
+    throw "Cannot find the DSH HTTP web-fetch provider: $webFetchPluginSource. Run pnpm install in $dshRoot."
 }
 $operatorPluginParent = Split-Path -Parent $operatorPluginLink
 New-Item -ItemType Directory -Force -Path $operatorPluginParent | Out-Null
@@ -118,6 +136,15 @@ if (Test-Path -LiteralPath $datasetPluginLink) {
 } else {
     New-Item -ItemType Junction -Path $datasetPluginLink -Target $datasetPluginSource | Out-Null
 }
+if (Test-Path -LiteralPath $webFetchPluginLink) {
+    $existingWebFetchLink = Get-Item -LiteralPath $webFetchPluginLink -Force
+    $resolvedWebFetchTarget = @($existingWebFetchLink.Target | ForEach-Object { [System.IO.Path]::GetFullPath([string]$_) })
+    if ($existingWebFetchLink.LinkType -ne 'Junction' -or $resolvedWebFetchTarget -notcontains [System.IO.Path]::GetFullPath($webFetchPluginSource)) {
+        throw "The DSH profile already contains a different @deepseek-ai/dsh-web-fetch-http entry: $webFetchPluginLink"
+    }
+} else {
+    New-Item -ItemType Junction -Path $webFetchPluginLink -Target $webFetchPluginSource | Out-Null
+}
 New-Item -ItemType Directory -Force -Path $mcpTempDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $internalTokenPath) | Out-Null
 if (-not (Test-Path -LiteralPath $internalTokenPath -PathType Leaf)) {
@@ -145,6 +172,20 @@ foreach ($name in @('DSH_REGISTRATION_INVITE_HASH', 'DSH_AUTH_DATABASE_PATH', 'D
     }
 }
 $mcpEnvironment = Read-DotEnv -Path $mcpEnvFile
+# One cache configuration inherited by DSH, MCP, validation and native workers.
+# Process overrides win; model-backend-specific variables keep their existing semantics.
+$cacheEnvironmentNames = @('CACHE_HOME', 'XDG_CACHE_HOME', 'DATA_JUICER_CACHE_HOME', 'DATA_JUICER_ASSETS_CACHE',
+    'DATA_JUICER_MODELS_CACHE', 'DATA_JUICER_EXTERNAL_MODELS_HOME', 'HF_HOME', 'HF_HUB_CACHE',
+    'HUGGINGFACE_HUB_CACHE', 'TRANSFORMERS_CACHE', 'TORCH_HOME', 'MODELSCOPE_CACHE', 'DSH_USER_DATA_ROOT')
+foreach ($cacheName in $cacheEnvironmentNames) {
+    $cacheValue = [Environment]::GetEnvironmentVariable($cacheName, 'Process')
+    if ([string]::IsNullOrWhiteSpace($cacheValue) -and $mcpEnvironment.ContainsKey($cacheName)) {
+        $cacheValue = $mcpEnvironment[$cacheName]
+    }
+    if ([string]::IsNullOrWhiteSpace($cacheValue) -and $cacheName -eq 'HF_HOME') { $cacheValue = $hfHome }
+    if ([string]::IsNullOrWhiteSpace($cacheValue) -and $cacheName -eq 'DSH_USER_DATA_ROOT') { $cacheValue = Join-Path $dshRoot '.dsh\users' }
+    if (-not [string]::IsNullOrWhiteSpace($cacheValue)) { [Environment]::SetEnvironmentVariable($cacheName, $cacheValue, 'Process') }
+}
 if ($mcpEnvironment.Count -eq 0) {
     Write-Warning "No plan-flow environment file found at $mcpEnvFile. API VLM plans will fail validation until it is configured."
 }
@@ -339,12 +380,19 @@ if ($null -ne $DshArgs) {
 Write-Host "Starting DSH DJ at $url"
 $process = $null
 try {
-    $process = Start-Process `
+    $dshProcessEnvironment = @{
+        HTTP_PROXY = $proxyUrl
+        HTTPS_PROXY = $proxyUrl
+        ALL_PROXY = $proxyUrl
+        NO_PROXY = $noProxy
+        NODE_USE_ENV_PROXY = '1'
+        PATH = "$hfScripts;$env:PATH"
+    }
+    $process = Start-ProcessWithEnvironment `
         -FilePath 'node.exe' `
         -ArgumentList $dshArgumentList `
         -WorkingDirectory $dshRoot `
-        -WindowStyle Hidden `
-        -PassThru
+        -Environment $dshProcessEnvironment
 
     for ($attempt = 0; $attempt -lt 40 -and -not $process.HasExited; $attempt++) {
         Start-Sleep -Milliseconds 250

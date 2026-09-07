@@ -1,0 +1,14 @@
+{"id": "good-alpine-lake", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\good-alpine-lake.jpg"], "caption": "一座红色小屋坐落在高山湖泊右岸。", "subject_hint": "alpine_lake"}
+{"id": "good-vase-sunflower", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\good-vase-sunflower.jpg"], "caption": "灰色桌面上摆着蓝绿色花瓶、向日葵、亚麻布和一本蓝色书。", "subject_hint": "still_life"}
+{"id": "good-cargo-bicycle", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\good-cargo-bicycle.jpg"], "caption": "一辆带藤编前篮的绿色载货自行车停在黄色墙边。", "subject_hint": "cargo_bicycle"}
+{"id": "good-cat-suitcase", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\good-cat-suitcase.jpg"], "caption": "一只橘猫蜷缩在打开的旧蓝色手提箱里睡觉。", "subject_hint": "cat_in_suitcase"}
+{"id": "undersized", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\undersized.jpg"], "caption": "一只黑狗坐在红椅子左侧。", "subject_hint": "dog_and_chair"}
+{"id": "extreme-aspect", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\extreme-aspect.jpg"], "caption": "一辆绿色载货自行车靠着黄色墙。", "subject_hint": "cargo_bicycle"}
+{"id": "subplot", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\subplot.jpg"], "caption": "湖泊、花瓶、自行车和猫组成的四宫格。", "subject_hint": "multi_subject_collage"}
+{"id": "nsfw-proxy", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\nsfw-proxy.jpg"], "caption": "一名成年女性穿着连体泳衣和罩衫站在海滩上。", "subject_hint": "adult_beachwear"}
+{"id": "watermark", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\watermark.jpg"], "caption": "一座红色小屋位于高山湖泊旁。", "subject_hint": "alpine_lake"}
+{"id": "low-aesthetic", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\low-aesthetic.jpg"], "caption": "花瓶里插着一朵向日葵。", "subject_hint": "still_life"}
+{"id": "duplicate-portrait-a", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\duplicate-portrait-a.jpg"], "caption": "一名成年女性在灰色背景前拍摄证件式肖像。", "subject_hint": "adult_portrait"}
+{"id": "duplicate-portrait-b", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\duplicate-portrait-b.jpg"], "caption": "灰色背景前是一名成年女性的正面肖像。", "subject_hint": "adult_portrait"}
+{"id": "caption-hard-mismatch", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\caption-hard-mismatch.jpg"], "caption": "一把红色椅子位于一只黑狗的左侧。", "subject_hint": "dog_and_chair"}
+{"id": "missing-tag", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-H\\images\\missing-tag.jpg"], "caption": "三名成年人并排站在灰色摄影棚背景前。", "subject_hint": ""}

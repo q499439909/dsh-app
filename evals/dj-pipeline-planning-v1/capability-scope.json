@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "snapshot_id": "dj-native-planning-2026-09-01",
+  "purpose": "Freeze the capability boundary used by the planning benchmark; this is not a runtime dependency certification.",
+  "included": [
+    "Dedicated Data-Juicer operators present in the current operator catalog and referenced by exact name in a case oracle",
+    "Normal composition of those operators using their published schemas"
+  ],
+  "excluded_escape_hatches": [
+    "python_lambda_mapper",
+    "python_file_mapper",
+    "new custom operators",
+    "new external capabilities",
+    "installing additional dependencies during a case",
+    "using a general LLM or VLM as an undocumented substitute for a missing deterministic capability"
+  ],
+  "reachability_rule": "A case is reachable only when the dedicated current operators can satisfy every hard acceptance criterion. Partial coverage does not make a case reachable.",
+  "runtime_rule": "If a required catalog operator is unavailable in the actual runtime because of missing dependencies, model configuration, or credentials, report runtime_blocked separately. Do not change the catalog-level gold label.",
+  "allowed_extension_behavior": "For an unreachable case, the planner may propose an external capability after declaring a capability gap. The proposal must not be represented as a current native solution.",
+  "evidence_sources": [
+    "D:/dj/data-juicer-1.5.4/docs/operators",
+    "D:/dsh-app/.dsh/skills/data-juicer-plan-flow-zh/SKILL.md"
+  ]
+}

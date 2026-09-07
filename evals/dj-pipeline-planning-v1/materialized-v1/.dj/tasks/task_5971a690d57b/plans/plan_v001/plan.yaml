@@ -1,0 +1,54 @@
+acceptance_criteria:
+- 'Retained set = records meeting width>=512 AND height>=512 AND 0.75<=width/height<=1.50
+  (expect 4: square-pass, portrait-boundary-pass, landscape-boundary-pass, large-pass).'
+- 'Dropped set = remaining 4 with correct reason: width-too-small and height-too-small
+  -> minimum_dimension; too-tall and too-wide -> aspect_ratio.'
+- 'Boundary correctness: ratios 0.7507 and 1.5 retained; width or height of 511 dropped.'
+- 'Images unmodified: sha256 of kept images matches checksums.sha256 (filter-only
+  pipeline, no formatter).'
+approval_required: true
+modality: image
+postprocess:
+- kind: python
+  name: deletion_reason_report
+  path: IMG-R-L/deletion_reason_report.py
+recipe:
+  dataset_path: D:\dsh-app\evals\dj-pipeline-planning-v1\materialized-v1\IMG-R-L\input.jsonl
+  executor_type: default
+  export_path: ${RUN_OUTPUT}/filtered.jsonl
+  image_key: image_path
+  np: 4
+  process:
+  - image_shape_filter:
+      any_or_all: any
+      min_height: 512
+      min_width: 512
+  - image_aspect_ratio_filter:
+      any_or_all: any
+      max_ratio: 1.5
+      min_ratio: 0.75
+risk_notes:
+- 'Bound inclusiveness: image_aspect_ratio_filter is expected to use inclusive >=/<=
+  bounds, so landscape-boundary-pass (ratio exactly 1.5) and portrait-boundary-pass
+  (0.7507) are kept; verified post-run against the expected 4-keep outcome.'
+- image_shape_filter self-loads images via image_key to populate image_width/image_height
+  stats before filtering; if stats were empty the 'any' strategy would drop everything.
+  Expected to self-populate; verified post-run.
+- Per-record deletion reasons are a genuine DJ-native gap (filters drop records but
+  emit no reason report); attributed in postprocess from pixel dimensions, which equal
+  actual decoded dimensions for these deterministic fixtures.
+- 'Runtime blocker BROKER_REQUIRED: pre-flight reports the execution broker is not
+  configured. This is an infrastructure gap outside plan content; run_plan may be
+  blocked until the broker is available. Surfaced at the approval gate.'
+user_intent: 'Filter image records in IMG-R-L/input.jsonl: keep records whose image
+  has width>=512 AND height>=512 AND 0.75<=width/height<=1.50. Do not scale, crop,
+  or rewrite images. Output retained records (filtered JSONL) and a per-record deletion-reason
+  report.'
+models: []
+schema_version: 1
+task_id: task_5971a690d57b
+plan_id: task_5971a690d57b/plan_v001
+plan_version: plan_v001
+based_on: null
+created_at: '2026-09-03T02:35:26.909954+00:00'
+artifacts: []

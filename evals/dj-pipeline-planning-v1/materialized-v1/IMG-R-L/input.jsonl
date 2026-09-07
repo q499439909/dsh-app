@@ -1,0 +1,8 @@
+{"id": "square-pass", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\square-pass.jpg"], "width": 512, "height": 512}
+{"id": "portrait-boundary-pass", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\portrait-boundary-pass.jpg"], "width": 512, "height": 682}
+{"id": "landscape-boundary-pass", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\landscape-boundary-pass.jpg"], "width": 768, "height": 512}
+{"id": "width-too-small", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\width-too-small.jpg"], "width": 511, "height": 512}
+{"id": "height-too-small", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\height-too-small.jpg"], "width": 512, "height": 511}
+{"id": "too-tall", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\too-tall.jpg"], "width": 512, "height": 800}
+{"id": "too-wide", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\too-wide.jpg"], "width": 900, "height": 512}
+{"id": "large-pass", "image_path": ["D:\\dsh-app\\evals\\dj-pipeline-planning-v1\\materialized-v1\\IMG-R-L\\images\\large-pass.jpg"], "width": 2048, "height": 1536}

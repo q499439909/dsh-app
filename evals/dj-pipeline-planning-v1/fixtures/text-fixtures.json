@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "fixture_type": "logical_text_fixture",
+  "fixtures": [
+    {
+      "fixture_id": "txt-basic-cleaning",
+      "record_count": 8,
+      "strata": [
+        {"id": "email", "count": 1, "example": "联系 test@example.com 获取资料。", "gold": "联系 获取资料。"},
+        {"id": "ipv4", "count": 1, "example": "服务位于 192.168.10.8，请勿公开。", "gold": "服务位于 ，请勿公开。"},
+        {"id": "url", "count": 1, "example": "详情见 https://example.com/a?id=7 。", "gold": "详情见 。"},
+        {"id": "mixed-targets", "count": 1, "example": "admin@acme.cn\t访问 http://10.0.0.1/docs", "gold_contains_none": ["admin@acme.cn", "http://10.0.0.1/docs", "\t"]},
+        {"id": "protected-numbers", "count": 1, "example": "产品 X200，订单 20260901001，售价 2999 元。", "must_remain": ["X200", "20260901001", "2999"]},
+        {"id": "protected-name", "count": 1, "example": "张伟负责 Alpha-2 项目。", "must_remain": ["张伟", "Alpha-2"]},
+        {"id": "punctuation", "count": 1, "example": "你好，world!  测试……完成。", "gold_semantics": "apply punctuation_normalization_mapper's native Unicode/fullwidth-to-English/halfwidth mapping without deleting words; consecutive ordinary ASCII spaces need not be collapsed"},
+        {"id": "clean-control", "count": 1, "example": "这是一条正常文本。", "gold": "这是一条正常文本。"}
+      ]
+    },
+    {
+      "fixture_id": "txt-web-corpus",
+      "record_count": 12,
+      "strata": [
+        {"id": "clean-articles", "count": 3, "gold_decision": "keep", "example": "一篇超过八十个汉字、结构正常且内容完整的中文文章正文。"},
+        {"id": "html-boilerplate", "count": 2, "gold_decision": "keep_after_cleaning", "example": "<html><nav>首页</nav><article>有效中文正文……</article></html>"},
+        {"id": "short", "count": 1, "gold_decision": "drop", "reason": "below minimum Chinese text length"},
+        {"id": "non-chinese", "count": 1, "gold_decision": "drop", "example": "This page contains predominantly English content."},
+        {"id": "symbol-noise", "count": 1, "gold_decision": "drop", "example": "%%%###***@@@！！！"},
+        {"id": "repetition-noise", "count": 1, "gold_decision": "drop", "example": "促销促销促销促销促销促销促销促销"},
+        {"id": "exact-duplicate-cluster", "count": 2, "gold_decision": "keep_one"},
+        {"id": "format-near-duplicate", "count": 1, "gold_decision": "merge_with_clean_equivalent"}
+      ]
+    },
+    {
+      "fixture_id": "txt-qa-curation",
+      "record_count": 16,
+      "strata": [
+        {"id": "high-quality", "count": 4, "gold_decision": "keep", "protected_facts": ["2024-01-01", "37.5", "Data-Juicer"]},
+        {"id": "verbose-but-fixable", "count": 2, "gold_decision": "optimize_then_keep"},
+        {"id": "incomplete-but-fixable", "count": 2, "gold_decision": "optimize_then_keep"},
+        {"id": "irrelevant-answer", "count": 2, "gold_decision": "drop"},
+        {"id": "unanswerable-query", "count": 1, "gold_decision": "drop"},
+        {"id": "too-easy", "count": 1, "gold_decision": "drop_or_downsample_per_threshold"},
+        {"id": "too-hard", "count": 1, "gold_decision": "drop_or_downsample_per_threshold"},
+        {"id": "duplicate-cluster", "count": 2, "gold_decision": "keep_one"},
+        {"id": "topic-overrepresented", "count": 1, "gold_decision": "subject_to_group-aware_balance"}
+      ]
+    },
+    {
+      "fixture_id": "txt-phone-mask",
+      "record_count": 10,
+      "strata": [
+        {"id": "plain-mobile", "count": 2, "examples": ["13812345678", "18600001234"], "gold": ["*******5678", "*******1234"]},
+        {"id": "spaced-mobile", "count": 1, "example": "138 1234 5678", "gold": "*******5678"},
+        {"id": "hyphenated-mobile", "count": 1, "example": "138-1234-5678", "gold": "*******5678"},
+        {"id": "order-number", "count": 2, "examples": ["20260901001", "11012345678"], "gold_decision": "unchanged"},
+        {"id": "landline", "count": 1, "example": "010-12345678", "gold_decision": "unchanged"},
+        {"id": "date-version", "count": 2, "examples": ["2026-09-01", "v11.138.2"], "gold_decision": "unchanged"},
+        {"id": "bank-card", "count": 1, "example": "6222020202020202020", "gold_decision": "unchanged"}
+      ]
+    },
+    {
+      "fixture_id": "txt-document-pseudonymization",
+      "record_count": 8,
+      "strata": [
+        {"id": "same-person-full-and-short-name", "count": 2, "example": "张伟加入星河科技。张先生随后代表该公司发言。", "gold_relation": "all references map consistently"},
+        {"id": "two-people-same-surname", "count": 1, "example": "张伟拜访张敏，两人不得映射为同一假名。", "gold_relation": "distinct identities remain distinct"},
+        {"id": "organization-alias", "count": 1, "example": "北京星河科技有限公司发布公告，星河科技称产品不变。", "gold_relation": "full and short organization names co-refer"},
+        {"id": "nested-address", "count": 1, "example": "办公地为北京市海淀区中关村大街 1 号。", "gold_relation": "detailed address pseudonymized"},
+        {"id": "protected-product", "count": 1, "example": "产品名星河一号不是机构名。", "gold_relation": "product name unchanged"},
+        {"id": "protected-facts", "count": 1, "example": "合同金额 125000 元，日期为 2026-09-01。", "gold_relation": "date and amount unchanged"},
+        {"id": "clean-control", "count": 1, "example": "天气晴朗，系统运行正常。", "gold_relation": "unchanged"}
+      ]
+    },
+    {
+      "fixture_id": "txt-corpus-reversible-privacy",
+      "record_count": 20,
+      "strata": [
+        {"id": "cross-document-person", "count": 4, "gold_relation": "same real identity maps to one pseudonym across documents"},
+        {"id": "homonym-different-person", "count": 2, "gold_relation": "same surface name but different identities do not collide"},
+        {"id": "multi-type-pii", "count": 4, "types": ["person", "organization", "address", "national_id", "mobile", "bank_card"]},
+        {"id": "quasi-identifier-small-cell", "count": 4, "gold_relation": "must be generalized or suppressed until k>=5"},
+        {"id": "quasi-identifier-valid-cell", "count": 5, "gold_relation": "already satisfies k>=5"},
+        {"id": "clean-control", "count": 1, "gold_relation": "non-sensitive content unchanged"}
+      ]
+    }
+  ]
+}

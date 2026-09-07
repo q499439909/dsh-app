@@ -1,0 +1,8 @@
+{"id":"TRL-001","text":"联系 test@example.com 获取资料。","lang":"zh"}
+{"id":"TRL-002","text":"服务位于 192.168.10.8，请勿公开。","lang":"zh"}
+{"id":"TRL-003","text":"详情见 https://example.com/a?id=7 。","lang":"zh"}
+{"id":"TRL-004","text":"admin@acme.cn\t访问 http://10.0.0.1/docs","lang":"zh"}
+{"id":"TRL-005","text":"产品 X200，订单 20260901001，售价 2999 元。","lang":"zh"}
+{"id":"TRL-006","text":"张伟负责 Alpha-2 项目。","lang":"zh"}
+{"id":"TRL-007","text":"你好，world!  测试……完成。","lang":"mixed"}
+{"id":"TRL-008","text":"这是一条正常文本。","lang":"zh"}

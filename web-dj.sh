@@ -8,6 +8,7 @@ DSH_PORT="${DSH_PORT:-57035}"
 DJ_MCP_PORT="${DJ_MCP_PORT:-8010}"
 DJ_EXECUTION_MODE="${DJ_EXECUTION_MODE:-native}"
 DSH_HOST="${DSH_HOST:-127.0.0.1}"
+export DSH_USER_DATA_ROOT="${DSH_USER_DATA_ROOT:-$DSH_ROOT/.dsh/users}"
 
 DSH_BIN="$DSH_ROOT/node_modules/@deepseek-ai/dsh/lib/bin.js"
 PATCH_TEMPLATE="$DSH_ROOT/dj-dsh.patch.yml"
@@ -120,6 +121,13 @@ read_env_value "$AUTH_ENV_FILE" DSH_AUTH_SECURE_COOKIE ||
 for name in OPENAI_API_KEY DASHSCOPE_API_KEY SK OPENAI_BASE_URL OPENAI_API_URL \
   DASHSCOPE_BASE_URL DJ_VLM_MODEL DASHSCOPE_DEFAULT_MODEL OPENAI_DEFAULT_MODEL; do
   read_env_value "$MCP_ENV_FILE" "$name" || true
+done
+
+# The checked-in patch retains the Windows development path. Generate a local
+for name in CACHE_HOME XDG_CACHE_HOME DATA_JUICER_CACHE_HOME DATA_JUICER_ASSETS_CACHE \
+  DATA_JUICER_MODELS_CACHE DATA_JUICER_EXTERNAL_MODELS_HOME HF_HOME HF_HUB_CACHE \
+  HUGGINGFACE_HUB_CACHE TRANSFORMERS_CACHE TORCH_HOME MODELSCOPE_CACHE; do
+  if [[ -z "${!name:-}" ]]; then read_env_value "$MCP_ENV_FILE" "$name" || true; fi
 done
 
 # The checked-in patch retains the Windows development path. Generate a local

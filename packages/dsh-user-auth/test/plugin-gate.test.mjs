@@ -133,6 +133,41 @@ test("auth UI is injected while secrets stay out of the boot payload", async () 
     app.listeners.get("webserver/index-inject")(table);
     assert.deepEqual(table.map(row => row.kind), ["style", "script"]);
     assert.equal(JSON.stringify(table).includes("test-invite"), false);
+    assert.match(table[1].text, /dsh-auth-account/);
+    assert.match(table[1].text, /\/auth\/logout/);
+    assert.match(table[0].text, /\[class\*="_collapsed"\] #dsh-auth-account/);
+    assert.doesNotMatch(table[0].text, /#dsh-auth-account\{position:fixed/);
+    assert.match(table[1].text, /\[class\*="footArea"\]/);
+    assert.doesNotMatch(table[1].text, /document\.body\.appendChild\(account\)/);
+  } finally {
+    await app.dispose();
+  }
+});
+
+test("logout revokes the server session and clears its cookie", async () => {
+  const app = fixture();
+  try {
+    const register = await invoke(
+      app.routes.get("/auth/register"),
+      request("POST", "/auth/register", {
+        username: "logout-user",
+        password: "a sufficiently long password",
+        inviteCode: "test-invite",
+      }),
+    );
+    const cookie = register.headers["set-cookie"].split(";", 1)[0];
+    const logout = await invoke(
+      app.routes.get("/auth/logout"),
+      request("POST", "/auth/logout", undefined, cookie),
+    );
+    assert.equal(logout.statusCode, 200);
+    assert.match(logout.headers["set-cookie"], /Max-Age=0/);
+
+    const session = await invoke(
+      app.routes.get("/auth/session"),
+      request("GET", "/auth/session", undefined, cookie),
+    );
+    assert.equal(JSON.parse(session.body).authenticated, false);
   } finally {
     await app.dispose();
   }

@@ -7,6 +7,7 @@
   "exports": {
     ".": "./lib/index.js",
     "./identity-access": "./lib/identity-access.js",
+    "./dj-bridge": "./lib/dj-bridge.js",
     "./package.json": "./package.json"
   },
   "files": ["lib"],

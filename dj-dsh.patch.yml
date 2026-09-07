@@ -11,7 +11,27 @@
   disabled: false
 - id: tool-jobs
   disabled: false
+- id: web
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+- id: tool-web
+  disabled: false
+  config:
+    search: true
+    fetch: true
+    searchTimeoutMs: 60000
+    fetchTimeoutMs: 30000
+    fetchMaxOutputChars: 120000
 - insert:
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+      config:
+        maxUrlLength: 2048
+        maxResponseBytes: 5000000
+        maxBodyChars: 100000
+        timeoutMs: 45000
+        maxRedirects: 0
     - id: dj-operator-library
       name: '@dsh-dj/operator-library'
       config:
@@ -29,7 +49,7 @@
       config:
         baseUrl: http://127.0.0.1:8010
     - id: mcp-dj
-      name: '@deepseek-ai/dsh-mcp-client'
+      name: '@dsh-dj/user-auth/dj-bridge'
       config:
         serverName: dj
         transport: streamable-http

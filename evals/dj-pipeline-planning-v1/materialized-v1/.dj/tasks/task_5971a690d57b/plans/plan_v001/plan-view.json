@@ -1,0 +1,45 @@
+{
+  "groups": [
+    {
+      "id": "stage-001",
+      "step_refs": [
+        "step-000"
+      ],
+      "summary": "",
+      "title": "image_shape_filter"
+    },
+    {
+      "id": "stage-002",
+      "step_refs": [
+        "step-001"
+      ],
+      "summary": "",
+      "title": "image_aspect_ratio_filter"
+    }
+  ],
+  "layout": "linear",
+  "plan_id": "task_5971a690d57b/plan_v001",
+  "plan_version": "plan_v001",
+  "recipe_content_hash": "sha256:4acf6185254f254ff5bf712c8088787711333010f7536217a186797aad58fb06",
+  "schema_version": "1.0",
+  "steps": [
+    {
+      "execution_key": "op_001_image_shape_filter",
+      "id": "step-000",
+      "implementation": {
+        "kind": "catalog_operator"
+      },
+      "operator_name": "image_shape_filter",
+      "process_index": 0
+    },
+    {
+      "execution_key": "op_002_image_aspect_ratio_filter",
+      "id": "step-001",
+      "implementation": {
+        "kind": "catalog_operator"
+      },
+      "operator_name": "image_aspect_ratio_filter",
+      "process_index": 1
+    }
+  ]
+}

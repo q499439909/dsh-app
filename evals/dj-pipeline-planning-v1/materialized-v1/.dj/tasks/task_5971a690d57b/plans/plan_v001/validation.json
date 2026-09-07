@@ -1,0 +1,11 @@
+{
+  "errors": [
+    {
+      "code": "POSTPROCESS_SCRIPT_REQUIRED",
+      "message": "postprocess script is required",
+      "path": "postprocess[0]"
+    }
+  ],
+  "ok": false,
+  "warnings": []
+}

@@ -1,0 +1,71 @@
+{
+  "case_id": "IMG-R-L",
+  "oracle_type": "deterministic_pixel_metadata",
+  "boundary_semantics": "width >= 512, height >= 512, 0.75 <= width/height <= 1.50",
+  "records": [
+    {
+      "id": "square-pass",
+      "width": 512,
+      "height": 512,
+      "aspect_ratio_width_over_height": 1.0,
+      "gold_decision": "keep",
+      "deletion_reason": null
+    },
+    {
+      "id": "portrait-boundary-pass",
+      "width": 512,
+      "height": 682,
+      "aspect_ratio_width_over_height": 0.750733,
+      "gold_decision": "keep",
+      "deletion_reason": null
+    },
+    {
+      "id": "landscape-boundary-pass",
+      "width": 768,
+      "height": 512,
+      "aspect_ratio_width_over_height": 1.5,
+      "gold_decision": "keep",
+      "deletion_reason": null
+    },
+    {
+      "id": "width-too-small",
+      "width": 511,
+      "height": 512,
+      "aspect_ratio_width_over_height": 0.998047,
+      "gold_decision": "drop",
+      "deletion_reason": "minimum_dimension"
+    },
+    {
+      "id": "height-too-small",
+      "width": 512,
+      "height": 511,
+      "aspect_ratio_width_over_height": 1.001957,
+      "gold_decision": "drop",
+      "deletion_reason": "minimum_dimension"
+    },
+    {
+      "id": "too-tall",
+      "width": 512,
+      "height": 800,
+      "aspect_ratio_width_over_height": 0.64,
+      "gold_decision": "drop",
+      "deletion_reason": "aspect_ratio"
+    },
+    {
+      "id": "too-wide",
+      "width": 900,
+      "height": 512,
+      "aspect_ratio_width_over_height": 1.757812,
+      "gold_decision": "drop",
+      "deletion_reason": "aspect_ratio"
+    },
+    {
+      "id": "large-pass",
+      "width": 2048,
+      "height": 1536,
+      "aspect_ratio_width_over_height": 1.333333,
+      "gold_decision": "keep",
+      "deletion_reason": null
+    }
+  ]
+}

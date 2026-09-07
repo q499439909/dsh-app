@@ -1,0 +1,368 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "dj-pipeline-planning-v1",
+  "capability_snapshot": "dj-native-planning-2026-09-01",
+  "cases": [
+    {
+      "case_id": "TXT-R-L",
+      "title": "原生文本规范化与显式标识清理",
+      "modality": "text",
+      "reachability": "reachable",
+      "difficulty": "low",
+      "task_prompt": "处理 input.jsonl 中的 text 字段。采用 Data-Juicer 原生规范化语义：规范制表符、换行等 Unicode 空白并裁剪文本首尾；将 Unicode/全角标点规范为英文半角标点。无需折叠原本存在的连续普通空格，不要求删除 CJK 标点相邻空格，也不做语境感知的半角转全角。删除电子邮箱、IPv4 地址和 HTTP/HTTPS 链接；不要删除普通数字、中文姓名或产品型号。输出仍为 JSONL，并保留 id、lang 字段。硬性验收：目标模式残留率为 0，原生空白与标点规范化生效，id、lang 字段和值不变，正文中的受保护文本不被误删。",
+      "input_profile": {
+        "format": "jsonl",
+        "records": 8,
+        "unit": "record.text",
+        "fields": ["id", "text", "lang"],
+        "fixture_ids": ["txt-basic-cleaning"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "target_pattern_residual_rate", "operator": "eq", "value": 0},
+        {"id": "A2", "hard": true, "metric": "non_target_field_change_count", "operator": "eq", "value": 0},
+        {"id": "A3", "hard": true, "metric": "protected_token_retention", "operator": "eq", "value": 1.0},
+        {"id": "A4", "hard": true, "metric": "native_whitespace_normalization_conformance", "operator": "eq", "value": 1.0},
+        {"id": "A5", "hard": true, "metric": "native_punctuation_normalization_conformance", "operator": "eq", "value": 1.0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["normalize Unicode whitespace with native semantics", "normalize Unicode/fullwidth punctuation to English/halfwidth", "remove email", "remove IPv4", "remove links"],
+        "operator_candidates": ["whitespace_normalization_mapper", "punctuation_normalization_mapper", "clean_email_mapper", "clean_ip_mapper", "clean_links_mapper"],
+        "order_constraints": ["Run content cleaning before final normalization when cleaning can leave adjacent whitespace."],
+        "capability_gaps": [],
+        "forbidden_substitutions": ["remove_specific_chars_mapper as a replacement for structured email, IP, or URL recognition"],
+        "expected_behavior": ["Classify as fully reachable", "Do not invent CJK-context punctuation or whitespace requirements excluded by the prompt", "Load exact schemas before fixing parameters", "Map every hard criterion to an operator or output comparison"]
+      }
+    },
+    {
+      "case_id": "TXT-R-M",
+      "title": "中文网页文章清洗与去重",
+      "modality": "text",
+      "reachability": "reachable",
+      "difficulty": "medium",
+      "task_prompt": "从中文网页抓取结果中构建文章语料。去除 HTML、页眉、评论、邮箱、IP 和链接，规范空白与标点；过滤非中文为主、正文少于 80 个汉字、特殊字符比例过高或重复片段严重的记录；最后进行文档级去重。保留 source_url 供审计，但不把它拼入正文。输出保留率不设固定值，硬性要求是所有规则可解释并输出各阶段计数。",
+      "input_profile": {
+        "format": "jsonl",
+        "records": 12,
+        "unit": "web article",
+        "fields": ["id", "text", "source_url", "crawl_time"],
+        "fixture_ids": ["txt-web-corpus"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "html_and_header_residual_count", "operator": "eq", "value": 0},
+        {"id": "A2", "hard": true, "metric": "bad_sample_recall", "operator": "gte", "value": 0.9},
+        {"id": "A3", "hard": true, "metric": "good_sample_retention", "operator": "gte", "value": 0.95},
+        {"id": "A4", "hard": true, "metric": "duplicate_cluster_survivors", "operator": "eq", "value": 1},
+        {"id": "A5", "hard": true, "metric": "stage_count_reported", "operator": "eq", "value": true}
+      ],
+      "gold": {
+        "atomic_capabilities": ["strip HTML", "remove boilerplate", "remove identifiers and links", "normalize text", "language filter", "length filter", "noise filter", "repetition filter", "document deduplication"],
+        "operator_candidates": ["clean_html_mapper", "remove_header_mapper", "remove_comments_mapper", "clean_email_mapper", "clean_ip_mapper", "clean_links_mapper", "whitespace_normalization_mapper", "punctuation_normalization_mapper", "language_id_score_filter", "text_length_filter", "special_characters_filter", "character_repetition_filter", "word_repetition_filter", "document_deduplicator", "document_minhash_deduplicator"],
+        "order_constraints": ["Clean and normalize before length and noise filtering.", "Run deduplication after normalization so superficial formatting differences do not survive as distinct documents."],
+        "capability_gaps": [],
+        "forbidden_substitutions": ["Use source_url text as document content", "Deduplicate before canonical text cleanup without explaining the loss in recall"],
+        "expected_behavior": ["Classify as fully reachable", "Present an ordered multi-stage pipeline", "Treat thresholds as parameters to validate on fixtures rather than invented facts"]
+      }
+    },
+    {
+      "case_id": "TXT-R-H",
+      "title": "高质量问答训练集构建",
+      "modality": "text",
+      "reachability": "reachable",
+      "difficulty": "high",
+      "task_prompt": "将 query/response 记录整理为中文问答训练集。修复明显不完整或冗余的问答，过滤答非所问、低质量、不可回答以及明显过难或过易的样本，控制各 topic 的数量不超过总量 35%，去除精确和近似重复。不得改变事实答案中的日期、数值和专有名词。输出需要质量分、相关性分、难度分、topic、删除原因和阶段统计。",
+      "input_profile": {
+        "format": "jsonl",
+        "records": 16,
+        "unit": "query-response pair",
+        "fields": ["id", "query", "response", "topic_hint"],
+        "fixture_ids": ["txt-qa-curation"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "unanswerable_recall", "operator": "gte", "value": 0.9},
+        {"id": "A2", "hard": true, "metric": "good_pair_retention", "operator": "gte", "value": 0.9},
+        {"id": "A3", "hard": true, "metric": "protected_fact_change_count", "operator": "eq", "value": 0},
+        {"id": "A4", "hard": true, "metric": "max_topic_ratio", "operator": "lte", "value": 0.35},
+        {"id": "A5", "hard": true, "metric": "duplicate_cluster_survivors", "operator": "eq", "value": 1},
+        {"id": "A6", "hard": true, "metric": "required_audit_fields_present", "operator": "eq", "value": true}
+      ],
+      "gold": {
+        "atomic_capabilities": ["optimize QA", "score quality", "score task relevance", "score difficulty", "detect topic", "filter by scores", "deduplicate", "balance topic distribution", "emit audit fields"],
+        "operator_candidates": ["optimize_qa_mapper", "optimize_query_mapper", "optimize_response_mapper", "llm_quality_score_filter", "llm_task_relevance_filter", "llm_difficulty_score_filter", "query_topic_detection_mapper", "document_deduplicator", "document_minhash_deduplicator", "frequency_specified_field_selector", "range_specified_field_selector"],
+        "order_constraints": ["Preserve original protected facts for post-transformation comparison.", "Score the normalized or optimized pair, not a discarded earlier representation.", "Deduplicate before final distribution balancing.", "Generate deletion reasons from actual decisions rather than a later guess."],
+        "capability_gaps": [],
+        "forbidden_substitutions": ["Claim fact preservation based only on an LLM prompt", "Use random sampling as topic balancing without grouping by topic"],
+        "expected_behavior": ["Classify as reachable with material model and threshold risks", "Call out the need for a labeled canary set", "Expose model-dependent steps and protected-field verification"]
+      }
+    },
+    {
+      "case_id": "IMG-R-L",
+      "title": "图片尺寸与宽高比筛选",
+      "modality": "image",
+      "reachability": "reachable",
+      "difficulty": "low",
+      "task_prompt": "筛选图片数据，只保留宽和高都不小于 512 像素、宽高比处于 0.75 到 1.50 之间的图片。不得缩放、裁剪或改写图片，只输出保留记录和被删除原因。",
+      "input_profile": {
+        "format": "image manifest jsonl",
+        "records": 8,
+        "unit": "image",
+        "fields": ["id", "image_path", "width", "height"],
+        "fixture_ids": ["img-shape-filter"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "selection_accuracy", "operator": "eq", "value": 1.0},
+        {"id": "A2", "hard": true, "metric": "source_image_byte_change_count", "operator": "eq", "value": 0},
+        {"id": "A3", "hard": true, "metric": "deletion_reason_coverage", "operator": "eq", "value": 1.0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["filter by image dimensions", "filter by aspect ratio"],
+        "operator_candidates": ["image_size_filter", "image_aspect_ratio_filter", "image_shape_filter"],
+        "order_constraints": ["No material order constraint between independent metadata filters; preserve source files."],
+        "capability_gaps": [],
+        "forbidden_substitutions": ["Resize or crop images to force them into the accepted range"],
+        "expected_behavior": ["Classify as fully reachable", "Translate the inclusive boundary conditions correctly", "Avoid transformation operators"]
+      }
+    },
+    {
+      "case_id": "IMG-R-M",
+      "title": "隐私安全人像数据筛选",
+      "modality": "image",
+      "reachability": "reachable",
+      "difficulty": "medium",
+      "task_prompt": "从候选图片中构建隐私安全的人像数据集。只保留恰好一张清晰人脸且人脸面积占比处于 15% 到 60% 的图片；过滤 NSFW、水印和明显低美学图片；对最终保留图片中的人脸进行模糊。非人脸区域不得被主动模糊。输出每项检测分数和删除原因。",
+      "input_profile": {
+        "format": "image manifest jsonl",
+        "records": 10,
+        "unit": "image",
+        "fields": ["id", "image_path"],
+        "fixture_ids": ["img-private-portrait"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "invalid_portrait_recall", "operator": "gte", "value": 0.9},
+        {"id": "A2", "hard": true, "metric": "good_portrait_retention", "operator": "gte", "value": 0.9},
+        {"id": "A3", "hard": true, "metric": "retained_face_blur_coverage", "operator": "eq", "value": 1.0},
+        {"id": "A4", "hard": true, "metric": "non_face_blur_rate", "operator": "lte", "value": 0.01},
+        {"id": "A5", "hard": true, "metric": "audit_score_coverage", "operator": "eq", "value": 1.0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["face count filter", "face ratio filter", "NSFW filter", "watermark filter", "aesthetic filter", "face blur"],
+        "operator_candidates": ["image_face_count_filter", "image_face_ratio_filter", "image_nsfw_filter", "image_watermark_filter", "image_aesthetics_filter", "image_face_blur_mapper"],
+        "order_constraints": ["Filter rejected images before the destructive face-blur transformation.", "Apply face blur only to retained records."],
+        "capability_gaps": [],
+        "forbidden_substitutions": ["Blur the entire image", "Treat watermark detection as watermark removal"],
+        "expected_behavior": ["Classify as reachable", "Separate selection stages from the final transformation", "Surface model thresholds as canary-calibrated parameters"]
+      }
+    },
+    {
+      "case_id": "IMG-R-H",
+      "title": "图文训练数据多阶段精选",
+      "modality": "image",
+      "reachability": "reachable",
+      "difficulty": "high",
+      "task_prompt": "构建图文训练数据集。过滤尺寸不足、极端宽高比、拼图、NSFW、水印和低美学图片；去除精确及视觉近重复；过滤图片与 caption 不匹配的样本；为缺少标签但合格的图片补充标签。保留长尾 subject，最终每个 subject 不超过 30%，并输出所有评分、重复簇、删除原因和阶段计数。",
+      "input_profile": {
+        "format": "image-text manifest jsonl",
+        "records": 14,
+        "unit": "image-caption pair",
+        "fields": ["id", "image_path", "caption", "subject_hint"],
+        "fixture_ids": ["img-text-curation"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "known_bad_image_recall", "operator": "gte", "value": 0.9},
+        {"id": "A2", "hard": true, "metric": "caption_mismatch_recall", "operator": "gte", "value": 0.9},
+        {"id": "A3", "hard": true, "metric": "good_pair_retention", "operator": "gte", "value": 0.9},
+        {"id": "A4", "hard": true, "metric": "duplicate_cluster_survivors", "operator": "eq", "value": 1},
+        {"id": "A5", "hard": true, "metric": "max_subject_ratio", "operator": "lte", "value": 0.3},
+        {"id": "A6", "hard": true, "metric": "required_audit_fields_present", "operator": "eq", "value": true}
+      ],
+      "gold": {
+        "atomic_capabilities": ["technical image filtering", "subplot filtering", "safety filtering", "watermark filtering", "aesthetic filtering", "image deduplication", "image-text alignment filtering", "image tagging", "subject balancing", "audit output"],
+        "operator_candidates": ["image_size_filter", "image_aspect_ratio_filter", "image_subplot_filter", "image_nsfw_filter", "image_watermark_filter", "image_aesthetics_filter", "image_deduplicator", "image_text_matching_filter", "image_text_similarity_filter", "image_tagging_mapper", "image_tagging_vlm_mapper", "frequency_specified_field_selector"],
+        "order_constraints": ["Apply cheap deterministic metadata filters before model-heavy filters.", "Deduplicate before final subject balancing.", "Do not run tag generation on records already rejected.", "Base subject balancing on resolved or generated subject metadata."],
+        "capability_gaps": [],
+        "forbidden_substitutions": ["Use average similarity alone without checking hard mismatches", "Randomly sample without subject-aware grouping"],
+        "expected_behavior": ["Classify as reachable with several model/runtime risks", "Produce a staged pipeline rather than an unordered operator list", "Require a labeled canary for thresholds and long-tail retention"]
+      }
+    },
+    {
+      "case_id": "TXT-U-L",
+      "title": "中国大陆手机号定格式遮蔽",
+      "modality": "text",
+      "reachability": "unreachable",
+      "difficulty": "low",
+      "task_prompt": "处理 text 字段，只遮蔽中国大陆手机号的前七位并保留后四位，例如 13812345678 变成 *******5678。带空格或连字符的号码也要识别。普通 11 位订单号、日期、固定电话、版本号和银行卡号不得改变。禁止临时脚本、通用 LLM 和新算子。",
+      "input_profile": {
+        "format": "jsonl",
+        "records": 10,
+        "unit": "record.text",
+        "fields": ["id", "text"],
+        "fixture_ids": ["txt-phone-mask"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "mobile_number_recall", "operator": "eq", "value": 1.0},
+        {"id": "A2", "hard": true, "metric": "non_mobile_number_change_count", "operator": "eq", "value": 0},
+        {"id": "A3", "hard": true, "metric": "last_four_digit_accuracy", "operator": "eq", "value": 1.0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["recognize Chinese mobile phone variants", "format-preserving partial masking"],
+        "operator_candidates": [],
+        "partial_operator_candidates": ["clean_email_mapper", "clean_ip_mapper", "remove_specific_chars_mapper"],
+        "order_constraints": [],
+        "capability_gaps": ["No dedicated current operator performs contextual Chinese mobile recognition plus last-four-preserving masking."],
+        "forbidden_substitutions": ["Delete every 11-digit number", "Use clean_email_mapper or clean_ip_mapper", "Use remove_specific_chars_mapper to destroy digits"],
+        "expected_behavior": ["Classify as unreachable under the frozen scope", "State that nearby cleaning operators are not equivalent", "Offer a regex/entity capability only as an extension proposal"]
+      }
+    },
+    {
+      "case_id": "TXT-U-M",
+      "title": "文档内一致实体假名化",
+      "modality": "text",
+      "reachability": "unreachable",
+      "difficulty": "medium",
+      "task_prompt": "对每篇中文文档中的人名、机构和详细地址进行假名化。同一实体在一篇文档内必须始终映射到同一个假名，不同实体不得碰撞；代词、简称和全称的共指关系应保持。不得改写普通名词、日期、金额和产品名。禁止临时脚本、通用 LLM 和新算子。",
+      "input_profile": {
+        "format": "jsonl",
+        "records": 8,
+        "unit": "document",
+        "fields": ["id", "text"],
+        "fixture_ids": ["txt-document-pseudonymization"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "sensitive_entity_recall", "operator": "gte", "value": 0.98},
+        {"id": "A2", "hard": true, "metric": "within_document_consistency", "operator": "eq", "value": 1.0},
+        {"id": "A3", "hard": true, "metric": "entity_collision_count", "operator": "eq", "value": 0},
+        {"id": "A4", "hard": true, "metric": "protected_fact_change_count", "operator": "eq", "value": 0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["named entity recognition", "coreference resolution", "typed pseudonym generation", "document-scoped mapping state", "protected-token verification"],
+        "operator_candidates": [],
+        "partial_operator_candidates": ["clean_email_mapper", "clean_ip_mapper", "llm_extract_mapper", "text_tagging_by_prompt_mapper"],
+        "order_constraints": [],
+        "capability_gaps": ["No dedicated operator provides entity/coreference resolution and collision-free document-scoped pseudonym mapping."],
+        "forbidden_substitutions": ["Independent sentence rewriting", "Deletion of the entire entity", "Claim consistency based solely on prompting"],
+        "expected_behavior": ["Classify as unreachable", "Explain partial detection versus missing stateful substitution", "Describe a reusable entity-pseudonymization capability contract if extension is requested"]
+      }
+    },
+    {
+      "case_id": "TXT-U-H",
+      "title": "全语料可逆假名化与隐私约束",
+      "modality": "text",
+      "reachability": "unreachable",
+      "difficulty": "high",
+      "task_prompt": "对整个语料中的人名、机构、地址、身份证号、手机号和银行卡号做跨文档一致且可逆的假名化。映射表必须与数据输出分离并受访问控制；同一真实实体跨文档映射一致，不同实体不得碰撞；输出数据需满足给定准标识符上的 k>=5，并通过独立泄漏扫描。禁止临时脚本、通用 LLM 和新算子。",
+      "input_profile": {
+        "format": "jsonl",
+        "records": 20,
+        "unit": "corpus",
+        "fields": ["id", "text", "region", "age_band"],
+        "fixture_ids": ["txt-corpus-reversible-privacy"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "sensitive_entity_recall", "operator": "gte", "value": 0.99},
+        {"id": "A2", "hard": true, "metric": "cross_document_mapping_consistency", "operator": "eq", "value": 1.0},
+        {"id": "A3", "hard": true, "metric": "round_trip_recovery_accuracy", "operator": "eq", "value": 1.0},
+        {"id": "A4", "hard": true, "metric": "minimum_k_anonymity", "operator": "gte", "value": 5},
+        {"id": "A5", "hard": true, "metric": "independent_leakage_findings", "operator": "eq", "value": 0},
+        {"id": "A6", "hard": true, "metric": "mapping_vault_separated", "operator": "eq", "value": true}
+      ],
+      "gold": {
+        "atomic_capabilities": ["multi-type entity recognition", "corpus-wide entity resolution", "persistent collision-free mapping", "reversible protected vault", "k-anonymity enforcement", "independent leakage validation"],
+        "operator_candidates": [],
+        "partial_operator_candidates": ["clean_email_mapper", "clean_ip_mapper", "specified_field_filter", "frequency_specified_field_selector"],
+        "order_constraints": [],
+        "capability_gaps": ["Current operators do not provide a protected reversible mapping vault.", "Current operators do not provide corpus-wide entity resolution and consistent mapping.", "Current operators do not jointly enforce k-anonymity and independent leakage validation."],
+        "forbidden_substitutions": ["Store the mapping beside the output data", "Call irreversible deletion reversible anonymization", "Treat frequency selection as proof of k-anonymity"],
+        "expected_behavior": ["Classify as unreachable", "Separate data transformation, security boundary, and privacy verification gaps", "Do not prepare a complete native Plan"]
+      }
+    },
+    {
+      "case_id": "IMG-U-L",
+      "title": "EXIF 方向纠正与元数据清除",
+      "modality": "image",
+      "reachability": "unreachable",
+      "difficulty": "low",
+      "task_prompt": "读取每张 JPEG 的 EXIF Orientation，按其值无损纠正显示方向，然后删除全部 EXIF、GPS 和设备元数据。除方向变换外不得调色、缩放、裁剪或重编码导致可见质量变化。禁止临时脚本和新算子。",
+      "input_profile": {
+        "format": "image manifest jsonl",
+        "records": 8,
+        "unit": "image",
+        "fields": ["id", "image_path", "exif_orientation", "has_gps"],
+        "fixture_ids": ["img-exif-sanitize"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "display_orientation_accuracy", "operator": "eq", "value": 1.0},
+        {"id": "A2", "hard": true, "metric": "metadata_residual_count", "operator": "eq", "value": 0},
+        {"id": "A3", "hard": true, "metric": "unexpected_pixel_change_count", "operator": "eq", "value": 0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["read EXIF orientation", "lossless orientation transform", "strip image metadata"],
+        "operator_candidates": [],
+        "partial_operator_candidates": ["image_shape_filter", "image_aspect_ratio_filter"],
+        "order_constraints": [],
+        "capability_gaps": ["No dedicated current image operator combines EXIF-aware orientation correction with metadata stripping under the stated fidelity constraint."],
+        "forbidden_substitutions": ["Filter incorrectly oriented images", "Resize or crop as orientation correction"],
+        "expected_behavior": ["Classify as unreachable", "Avoid confusing metadata inspection with transformation", "Offer an EXIF sanitizer only as an extension"]
+      }
+    },
+    {
+      "case_id": "IMG-U-M",
+      "title": "水印定位、移除与高保真修复",
+      "modality": "image",
+      "reachability": "unreachable",
+      "difficulty": "medium",
+      "task_prompt": "不得丢弃带水印图片。自动定位文字或半透明 logo 水印，移除后修复区域；非水印区域相对原图 SSIM 必须不低于 0.99，水印残留率不得高于 1%，不得改变人物身份或主体结构。禁止临时脚本、通用 VLM 和新算子。",
+      "input_profile": {
+        "format": "image manifest jsonl",
+        "records": 10,
+        "unit": "image",
+        "fields": ["id", "image_path", "watermark_mask_gold"],
+        "fixture_ids": ["img-watermark-inpaint"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "record_retention", "operator": "eq", "value": 1.0},
+        {"id": "A2", "hard": true, "metric": "watermark_residual_rate", "operator": "lte", "value": 0.01},
+        {"id": "A3", "hard": true, "metric": "non_watermark_region_ssim", "operator": "gte", "value": 0.99},
+        {"id": "A4", "hard": true, "metric": "subject_identity_change_count", "operator": "eq", "value": 0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["watermark localization", "mask-aware removal", "content-aware inpainting", "regional fidelity verification"],
+        "operator_candidates": [],
+        "partial_operator_candidates": ["image_watermark_filter", "image_diffusion_mapper", "image_segment_mapper"],
+        "order_constraints": [],
+        "capability_gaps": ["image_watermark_filter detects or rejects; it does not preserve and repair the image.", "Generic diffusion does not provide the required watermark localization and regional fidelity guarantee."],
+        "forbidden_substitutions": ["Discard watermarked images", "Call filtering removal", "Apply whole-image diffusion and claim high-fidelity inpainting"],
+        "expected_behavior": ["Classify as unreachable", "Identify the filtering-versus-transformation mismatch", "Name localization, inpainting, and verification as separate missing capabilities"]
+      }
+    },
+    {
+      "case_id": "IMG-U-H",
+      "title": "跨图片一致的人脸身份替换",
+      "modality": "image",
+      "reachability": "unreachable",
+      "difficulty": "high",
+      "task_prompt": "按 person_group 对同一人物的多视角照片执行身份替换。组内所有图片必须替换成同一个合成身份，不同组使用不同身份；保留原姿态、表情、视线、光照和背景，不能仅模糊或遮挡人脸。身份验证模型对原身份相似度需低于 0.2、组内替换后相似度需高于 0.8。禁止临时脚本、通用 VLM 和新算子。",
+      "input_profile": {
+        "format": "grouped image manifest jsonl",
+        "records": 12,
+        "unit": "person_group",
+        "fields": ["id", "image_path", "person_group", "view", "expression"],
+        "fixture_ids": ["img-consistent-identity-replacement"]
+      },
+      "acceptance_criteria": [
+        {"id": "A1", "hard": true, "metric": "max_similarity_to_original_identity", "operator": "lte", "value": 0.2},
+        {"id": "A2", "hard": true, "metric": "min_within_group_new_identity_similarity", "operator": "gte", "value": 0.8},
+        {"id": "A3", "hard": true, "metric": "cross_group_identity_collision_count", "operator": "eq", "value": 0},
+        {"id": "A4", "hard": true, "metric": "pose_expression_background_preservation", "operator": "gte", "value": 0.95},
+        {"id": "A5", "hard": true, "metric": "blur_only_output_count", "operator": "eq", "value": 0}
+      ],
+      "gold": {
+        "atomic_capabilities": ["face tracking across images", "group-scoped synthetic identity assignment", "pose-preserving identity transfer", "identity collision control", "biometric verification"],
+        "operator_candidates": [],
+        "partial_operator_candidates": ["image_face_blur_mapper", "image_segment_mapper", "image_diffusion_mapper", "image_mmpose_mapper"],
+        "order_constraints": [],
+        "capability_gaps": ["Current face blur is privacy-preserving but is not identity replacement.", "Current single-image segmentation, pose, and diffusion operators do not provide group-scoped identity state or biometric guarantees."],
+        "forbidden_substitutions": ["Blur or cover faces", "Generate each image independently", "Claim identity consistency without cross-image verification"],
+        "expected_behavior": ["Classify as unreachable", "Explain why several partially relevant image operators cannot be composed into the promised effect", "Propose a stateful group-level capability only as an extension"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "case_id": "IMG-R-M",
+  "oracle_type": "semantic_strata_with_manual_annotations",
+  "important": [
+    "Face counts and ratios are fixture annotations; calibrate Data-Juicer detector thresholds on these images before scoring.",
+    "nsfw-proxy is deliberately non-explicit adult swimwear. Its score is a safety-model calibration probe, not guaranteed to cross every model's NSFW threshold.",
+    "Only the three valid-portrait records should reach image_face_blur_mapper."
+  ],
+  "records": [
+    {
+      "id": "valid-portrait-01",
+      "gold_decision": "keep_then_blur_face",
+      "deletion_reason": null,
+      "face_count_gold": 1,
+      "face_ratio_gold_approx": 0.193
+    },
+    {
+      "id": "valid-portrait-02",
+      "gold_decision": "keep_then_blur_face",
+      "deletion_reason": null,
+      "face_count_gold": 1,
+      "face_ratio_gold_approx": 0.193
+    },
+    {
+      "id": "valid-portrait-03",
+      "gold_decision": "keep_then_blur_face",
+      "deletion_reason": null,
+      "face_count_gold": 1,
+      "face_ratio_gold_approx": 0.232
+    },
+    {
+      "id": "no-face",
+      "gold_decision": "drop",
+      "deletion_reason": "face_count_not_one",
+      "face_count_gold": 0
+    },
+    {
+      "id": "multiple-faces",
+      "gold_decision": "drop",
+      "deletion_reason": "face_count_not_one",
+      "face_count_gold": 3
+    },
+    {
+      "id": "face-too-small",
+      "gold_decision": "drop",
+      "deletion_reason": "face_ratio_below_0.15",
+      "face_count_gold": 1,
+      "face_ratio_gold_approx": 0.08
+    },
+    {
+      "id": "face-too-large",
+      "gold_decision": "drop",
+      "deletion_reason": "face_ratio_above_0.60",
+      "face_count_gold": 1,
+      "face_ratio_gold_approx": 0.76
+    },
+    {
+      "id": "nsfw-proxy",
+      "gold_decision": "drop",
+      "deletion_reason": "nsfw_threshold_runtime_dependent",
+      "face_count_gold": 1,
+      "safety_fixture": "benign adult swimwear proxy; non-explicit"
+    },
+    {
+      "id": "watermark",
+      "gold_decision": "drop",
+      "deletion_reason": "watermark",
+      "face_count_gold": 1,
+      "face_ratio_gold_approx": 0.193
+    },
+    {
+      "id": "low-aesthetic",
+      "gold_decision": "drop",
+      "deletion_reason": "low_aesthetic",
+      "face_count_gold": 1,
+      "quality_defect": "pixelation_blur_low_contrast_banding"
+    }
+  ]
+}

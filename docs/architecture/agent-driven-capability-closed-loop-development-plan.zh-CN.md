@@ -504,7 +504,11 @@ resolve_capabilities(
 
 返回内置覆盖、Catalog 覆盖、缺口、候选 bindings 和必要证据。
 
-### 7.2 准备 Capability Proposal
+### 7.2 独立的 Capability Governance interface
+
+以下 interface 不向主 Agent 暴露，仅供能力开发 Agent 或管理员使用。
+
+#### 准备 Capability Proposal
 
 ```python
 prepare_capability(
@@ -525,7 +529,7 @@ prepare_capability(
 - 不接受 Dockerfile、Docker args 或任意宿主目标路径；
 - 工具可以异步返回 proposal ID，由 `get_capability` 查询状态。
 
-### 7.3 查询与审批
+#### 查询与审批
 
 ```python
 get_capability(proposal_id) -> CapabilityProposalStatus
@@ -539,13 +543,16 @@ approve_capability(
 
 审批后自动发布；发布成功返回可绑定的 capability/operator/model IDs。失败不静默退回共享 venv。
 
-### 7.4 现有 Plan interface
+### 7.3 主 Agent Plan interface
 
-保留：
+主 Agent 固定暴露 10 个 Tool：
 
+- `inspect_input`
+- `search_capabilities`
+- `get_capability_schemas`
+- `resolve_capabilities`
 - `prepare_plan`
 - `get_plan`
-- `preview_plan`
 - `approve_plan`
 - `run_plan`
 - `get_run`
@@ -554,7 +561,9 @@ approve_capability(
 修改：
 
 - `prepare_plan` 接受/生成 `operator_bindings`；
-- `preview_plan` 展示 Runtime 组成、模型、数据快照策略和输出契约；
+- `prepare_plan` 在保存不可变 Plan 后执行无副作用的 Runtime 解析与预检，返回执行后端、目标设备、模型输入、CPU/GPU 回退、阻断项和警告；
+- `get_plan` 直接返回 `execution_preview` 与实时 `runtime_assessment`，不再单独暴露 `preview_plan`；
+- `run_plan` 在实际提交前重新执行 Runtime 预检，显式 GPU 要求无法满足时拒绝运行；
 - `run_plan` 只走 Broker，不再隐式创建 LocalProcessBackend；
 - LocalProcessBackend 仅供显式测试，不是 MCP 正式路径。
 

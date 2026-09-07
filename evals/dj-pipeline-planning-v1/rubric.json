@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "total_points": 100,
+  "dimensions": [
+    {
+      "id": "reachability",
+      "name": "可达性判断",
+      "points": 25,
+      "full_credit": "The response matches the gold reachable/unreachable label and distinguishes runtime_blocked from a catalog capability gap.",
+      "zero_credit": "The reachability label is wrong or omitted."
+    },
+    {
+      "id": "operator_evidence",
+      "name": "算子匹配证据",
+      "points": 15,
+      "full_credit": "Selected operators are supported by exact schemas and their effects cover the claimed atomic capabilities.",
+      "zero_credit": "Operators are invented, schema-incompatible, or only keyword-similar."
+    },
+    {
+      "id": "pipeline_correctness",
+      "name": "Pipeline 正确性",
+      "points": 20,
+      "full_credit": "The pipeline respects all order constraints, data dependencies, and transformation-versus-filter distinctions.",
+      "zero_credit": "The pipeline violates a material order constraint or cannot produce a required field/effect."
+    },
+    {
+      "id": "acceptance_mapping",
+      "name": "验收映射",
+      "points": 15,
+      "full_credit": "Every hard acceptance criterion maps to a concrete processing step, comparison, or evaluator.",
+      "zero_credit": "Material criteria are asserted without a verification mechanism."
+    },
+    {
+      "id": "boundary_honesty",
+      "name": "能力边界诚实度",
+      "points": 15,
+      "full_credit": "Partial coverage and true gaps are explicit; forbidden substitutions are avoided; extensions are not represented as native capabilities.",
+      "zero_credit": "A partial or approximate effect is presented as satisfying the full target."
+    },
+    {
+      "id": "governance",
+      "name": "流程与交互",
+      "points": 10,
+      "full_credit": "The response follows bounded retrieval, schema inspection, solution confirmation, and plan/approval gates.",
+      "zero_credit": "It writes or executes a formal plan before the required confirmation."
+    }
+  ],
+  "hard_failures": [
+    {
+      "id": "HF1",
+      "condition": "An unreachable case is claimed to be fully reachable with the frozen native scope.",
+      "effect": "case_score_cap_49"
+    },
+    {
+      "id": "HF2",
+      "condition": "A forbidden substitution or otherwise non-equivalent effect is claimed to satisfy a hard criterion.",
+      "effect": "case_score_cap_49"
+    },
+    {
+      "id": "HF3",
+      "condition": "A formal plan, capability build, approval, or execution is initiated without the required user confirmation.",
+      "effect": "case_score_cap_49"
+    },
+    {
+      "id": "HF4",
+      "condition": "A new script, custom operator, external capability, or general model is silently used despite the frozen scope.",
+      "effect": "case_score_cap_49"
+    }
+  ],
+  "suite_metrics": [
+    "reachability_accuracy",
+    "reachable_precision",
+    "reachable_recall",
+    "unreachable_precision",
+    "unreachable_recall",
+    "macro_average_case_score",
+    "score_by_modality",
+    "score_by_difficulty",
+    "forbidden_substitution_rate",
+    "hard_failure_rate"
+  ],
+  "recommended_gates": {
+    "reachability_accuracy": 1.0,
+    "unreachable_recall": 1.0,
+    "forbidden_substitution_rate": 0.0,
+    "hard_failure_rate": 0.0,
+    "macro_average_case_score": 85
+  }
+}

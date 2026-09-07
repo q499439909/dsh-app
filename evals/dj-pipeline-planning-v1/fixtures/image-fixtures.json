@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "fixture_type": "logical_image_fixture",
+  "note": "These are deterministic semantic profiles for planner evaluation. media_path values are intentionally absent; operator-effect testing requires a separately licensed materialization.",
+  "fixtures": [
+    {
+      "fixture_id": "img-shape-filter",
+      "record_count": 8,
+      "records": [
+        {"id": "square-pass", "width": 512, "height": 512, "gold_decision": "keep"},
+        {"id": "portrait-boundary-pass", "width": 512, "height": 682, "gold_decision": "keep"},
+        {"id": "landscape-boundary-pass", "width": 768, "height": 512, "gold_decision": "keep"},
+        {"id": "width-too-small", "width": 511, "height": 512, "gold_decision": "drop", "reason": "minimum dimension"},
+        {"id": "height-too-small", "width": 512, "height": 511, "gold_decision": "drop", "reason": "minimum dimension"},
+        {"id": "too-tall", "width": 512, "height": 800, "gold_decision": "drop", "reason": "aspect ratio"},
+        {"id": "too-wide", "width": 900, "height": 512, "gold_decision": "drop", "reason": "aspect ratio"},
+        {"id": "large-pass", "width": 2048, "height": 1536, "gold_decision": "keep"}
+      ]
+    },
+    {
+      "fixture_id": "img-private-portrait",
+      "record_count": 10,
+      "strata": [
+        {"id": "valid-portrait", "count": 3, "face_count": 1, "face_ratio_range": [0.15, 0.6], "gold_decision": "keep_then_blur_face"},
+        {"id": "no-face", "count": 1, "face_count": 0, "gold_decision": "drop"},
+        {"id": "multiple-faces", "count": 1, "face_count": 3, "gold_decision": "drop"},
+        {"id": "face-too-small", "count": 1, "face_count": 1, "face_ratio": 0.08, "gold_decision": "drop"},
+        {"id": "face-too-large", "count": 1, "face_count": 1, "face_ratio": 0.76, "gold_decision": "drop"},
+        {"id": "nsfw", "count": 1, "gold_decision": "drop"},
+        {"id": "watermark", "count": 1, "gold_decision": "drop"},
+        {"id": "low-aesthetic", "count": 1, "gold_decision": "drop"}
+      ]
+    },
+    {
+      "fixture_id": "img-text-curation",
+      "record_count": 14,
+      "strata": [
+        {"id": "good-long-tail-pairs", "count": 4, "gold_decision": "keep"},
+        {"id": "undersized", "count": 1, "gold_decision": "drop"},
+        {"id": "extreme-aspect", "count": 1, "gold_decision": "drop"},
+        {"id": "subplot", "count": 1, "gold_decision": "drop"},
+        {"id": "nsfw", "count": 1, "gold_decision": "drop"},
+        {"id": "watermark", "count": 1, "gold_decision": "drop"},
+        {"id": "low-aesthetic", "count": 1, "gold_decision": "drop"},
+        {"id": "visual-duplicate-cluster", "count": 2, "gold_decision": "keep_one"},
+        {"id": "caption-hard-mismatch", "count": 1, "gold_decision": "drop", "example": "caption changes a spatial relation while retaining the same nouns"},
+        {"id": "missing-tag", "count": 1, "gold_decision": "keep_and_tag"}
+      ]
+    },
+    {
+      "fixture_id": "img-exif-sanitize",
+      "record_count": 8,
+      "records": [
+        {"id": "orientation-1", "exif_orientation": 1, "has_gps": true},
+        {"id": "orientation-2", "exif_orientation": 2, "has_gps": false},
+        {"id": "orientation-3", "exif_orientation": 3, "has_gps": true},
+        {"id": "orientation-4", "exif_orientation": 4, "has_gps": false},
+        {"id": "orientation-5", "exif_orientation": 5, "has_gps": true},
+        {"id": "orientation-6", "exif_orientation": 6, "has_gps": true},
+        {"id": "orientation-7", "exif_orientation": 7, "has_gps": false},
+        {"id": "orientation-8", "exif_orientation": 8, "has_gps": true}
+      ],
+      "gold": "All display upright, all metadata absent, and no unexpected pixel-domain changes."
+    },
+    {
+      "fixture_id": "img-watermark-inpaint",
+      "record_count": 10,
+      "strata": [
+        {"id": "opaque-text-watermark", "count": 2, "mask_available": true},
+        {"id": "transparent-logo", "count": 2, "mask_available": true},
+        {"id": "repeated-diagonal-watermark", "count": 2, "mask_available": true},
+        {"id": "watermark-over-face", "count": 1, "mask_available": true, "identity_preservation_required": true},
+        {"id": "watermark-over-texture", "count": 1, "mask_available": true},
+        {"id": "clean-control", "count": 2, "mask_available": true, "gold": "unchanged"}
+      ]
+    },
+    {
+      "fixture_id": "img-consistent-identity-replacement",
+      "record_count": 12,
+      "groups": [
+        {"person_group": "A", "count": 4, "views": ["front", "left", "right", "three-quarter"], "expressions": ["neutral", "smile"]},
+        {"person_group": "B", "count": 4, "views": ["front", "left", "right", "three-quarter"], "expressions": ["neutral", "surprise"]},
+        {"person_group": "C", "count": 4, "views": ["front", "left", "right", "three-quarter"], "expressions": ["neutral", "frown"]}
+      ],
+      "gold": "One new identity per group, three distinct new identities overall, with pose/expression/background preserved."
+    }
+  ]
+}
