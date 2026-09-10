@@ -176,7 +176,8 @@ $mcpEnvironment = Read-DotEnv -Path $mcpEnvFile
 # Process overrides win; model-backend-specific variables keep their existing semantics.
 $cacheEnvironmentNames = @('CACHE_HOME', 'XDG_CACHE_HOME', 'DATA_JUICER_CACHE_HOME', 'DATA_JUICER_ASSETS_CACHE',
     'DATA_JUICER_MODELS_CACHE', 'DATA_JUICER_EXTERNAL_MODELS_HOME', 'HF_HOME', 'HF_HUB_CACHE',
-    'HUGGINGFACE_HUB_CACHE', 'TRANSFORMERS_CACHE', 'TORCH_HOME', 'MODELSCOPE_CACHE', 'DSH_USER_DATA_ROOT')
+    'HUGGINGFACE_HUB_CACHE', 'TRANSFORMERS_CACHE', 'TORCH_HOME', 'MODELSCOPE_CACHE', 'DSH_USER_DATA_ROOT',
+    'DSH_PRELOADED_MODEL_ROOT', 'DSH_MODEL_ARTIFACT_CACHE', 'DSH_MODEL_NETWORK_POLICY')
 foreach ($cacheName in $cacheEnvironmentNames) {
     $cacheValue = [Environment]::GetEnvironmentVariable($cacheName, 'Process')
     if ([string]::IsNullOrWhiteSpace($cacheValue) -and $mcpEnvironment.ContainsKey($cacheName)) {

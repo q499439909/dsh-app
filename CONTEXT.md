@@ -20,6 +20,58 @@ _Avoid_: Atomic requirement, script fragment
 An immutable, validated bundle containing one or more external Data-Juicer operators and their schema metadata.
 _Avoid_: Capability image, loose Python file
 
+**Pipeline Artifact**:
+An immutable reusable processing graph with exact Operator references, parameter defaults, input/output contracts, and end-to-end validation evidence; a task-specific Plan instantiates it.
+_Avoid_: Plan, mutable recipe, operator
+
+**Pipeline Scenario**:
+A stable end-to-end processing goal used to group and compare Pipeline Artifacts under the same input/output expectations.
+_Avoid_: Capability Family, Plan, pipeline version
+
+**Capability Family**:
+A stable grouping of interchangeable Operator implementations that satisfy the same capability semantics and can be compared under one evaluation profile.
+_Avoid_: Operator category, leaderboard
+
+**Asset Release**:
+The publication of one exact Operator Artifact or Pipeline Artifact into a personal, team, or platform Governance Scope, with its maturity, lifecycle state, and maintainers.
+_Avoid_: Artifact copy, mutable asset
+
+**Governance Scope**:
+The personal, team, or platform context that determines who can discover an Asset Release and who accepts responsibility for it. Team and platform scopes are independent publication ranges; a team release is neither a prerequisite nor a maturity step for a platform release.
+_Avoid_: Maturity level, lifecycle state, promotion ladder
+
+**Joint Maintenance**:
+The shared responsibility established after a team or platform accepts an author's Operator Artifact: the author maintains the algorithm and implementation while the accepting party maintains availability and governance.
+_Avoid_: Ownership transfer, anonymous community maintenance
+
+**Benchmark Profile**:
+A versioned evaluation contract for one Capability Family that fixes the dataset, metrics, thresholds, runtime conditions, and failure classification used to compare Operator Artifacts.
+_Avoid_: Validation contract, global leaderboard
+
+**Candidate Deployment**:
+A platform-controlled deployment of a newly generated Operator Artifact for benchmark, shadow, or canary evaluation before it is accepted into the production catalog.
+_Avoid_: Platform acceptance, production release
+
+**Automated Candidate Gate**:
+The repeatable platform decision that an Asset Release has complete declarations, a resolvable contract, an accountable maintainer, and a successful minimal deployment and run, allowing it to enter gray evaluation.
+_Avoid_: Production acceptance, quality ranking, human value judgment
+
+**Publication Review**:
+The decision on whether gray evidence, capability value, overlap, applicability, and maintenance responsibility justify publishing a Candidate Deployment into the formal platform catalog.
+_Avoid_: Repeating automated checks, candidate deployment
+
+**Gray Evidence Target**:
+The minimum adoption, quality, and value evidence that one Candidate Deployment must collect within an observation window before promotion can be decided; it is expressed as sample goals rather than a fixed share of all platform traffic.
+_Avoid_: Fixed traffic percentage, benchmark score alone
+
+**Exploration Budget**:
+The platform-controlled opportunities assigned to a Candidate Deployment through targeted recommendation, team trials, canary execution, shadow execution, or replay to reach its Gray Evidence Target while limiting production risk.
+_Avoid_: Guaranteed production traffic, global ten-percent split
+
+**Recommendation Match Grade**:
+A task-relative relevance tier assigned after eligibility filtering by comparing the task with an asset's declared capability, structured contract, and applicability conditions; asset provenance does not change the grade and is used only to break ties.
+_Avoid_: Benchmark rank, maturity level, raw floating-point similarity
+
 **Capability**:
 An approved implementation of one or more Atomic Requirements, backed by Operator Artifacts, Model Artifacts, dependency facts, and an explicit security contract.
 _Avoid_: Docker image, operator name

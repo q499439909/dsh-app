@@ -48,6 +48,7 @@ if cascade.empty():
 
 from data_juicer.ops.filter.image_face_count_filter import ImageFaceCountFilter
 from data_juicer.ops.filter.image_face_ratio_filter import ImageFaceRatioFilter
+from data_juicer.tools.plan_flow.runtime_environment_lock import freeze_runtime_lock
 
 ImageFaceCountFilter(min_face_count=1, max_face_count=1)
 ImageFaceRatioFilter(min_ratio=0.15, max_ratio=0.60)
@@ -55,6 +56,18 @@ ImageFaceRatioFilter(min_ratio=0.15, max_ratio=0.60)
 print(f"DJ runtime OK: python={sys.executable}")
 print(f"OpenCV distributions: {opencv_distributions}")
 print(f"cv2={cv2.__version__}; face operators instantiated")
+runtime_lock = freeze_runtime_lock()
+print(f"uv.lock={runtime_lock['sha256']}; python={runtime_lock['python']}")
+for package, expected_version in runtime_lock["audited_packages"].items():
+    try:
+        actual_version = version(package)
+    except PackageNotFoundError:
+        continue
+    if actual_version != expected_version:
+        print(
+            f"DJ runtime warning: {package}=={actual_version} differs from uv.lock ({expected_version}); "
+            "plans requiring it will be blocked"
+        )
 '@
 
 $probeOutput = @(& $PythonExe -c $probe 2>&1)
