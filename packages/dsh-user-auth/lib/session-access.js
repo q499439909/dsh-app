@@ -1,15 +1,7 @@
+import { accessDenied } from './rpc-errors.js';
+
 function denied(request) {
-  return {
-    rpcId: request?.rpcId,
-    result: {
-      ok: false,
-      error: {
-        code: "session-forbidden",
-        message: "You do not have access to this session.",
-        details: {},
-      },
-    },
-  };
+  return accessDenied(request, 'session-forbidden', '当前账号无权访问此会话。');
 }
 
 function responseValue(response) {

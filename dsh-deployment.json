@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "djRoot": "../dj/data-juicer-1.5.4",
+  "pythonExe": "../dj/.envs/dsh-dj-uvlock-20260911/Scripts/python.exe",
+  "workspaceRoot": ".",
+  "hfHome": "../shishi/.cache/huggingface",
+  "webPort": 57035,
+  "djPort": 8010,
+  "executionMode": "native",
+  "proxyUrl": "http://127.0.0.1:15236",
+  "observability": true,
+  "publicOrigin": null
+}

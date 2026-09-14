@@ -1,0 +1,27 @@
+diff --git a/lib/index.js b/lib/index.js
+index 5398bcea360c1f459d02880d41b1af42eaf8e3a8..f6fe5fbb831714bb2a8e6663df7ad95ed7dffc2e 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1651,7 +1651,8 @@ function createApiProxy(ctx, defaults) {
+ 		const { provider, model } = defaults.defaultModelSelection();
+ 		return {
+ 			provider,
+-			model
++			model,
++			temperature: 0.6
+ 		};
+ 	};
+ 	const selections = /* @__PURE__ */ new WeakMap();
+diff --git a/lib/types/api-proxy.js b/lib/types/api-proxy.js
+index adf2670b4db79fb171e7ea3ba125c6e70d6240b2..ca2088330ca1a79098b51def912db9ec3f6c109a 100644
+--- a/lib/types/api-proxy.js
++++ b/lib/types/api-proxy.js
+@@ -826,7 +826,7 @@ export function createApiProxy(ctx, defaults) {
+     /** The seed model each create/resume declares; re-read so it never goes stale. */
+     const agentOptions = () => {
+         const { provider, model } = defaults.defaultModelSelection();
+-        return { provider, model };
++        return { provider, model, temperature: 0.6 };
+     };
+     const selections = new WeakMap();
+     /**

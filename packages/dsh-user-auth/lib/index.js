@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { AuthError, IdentityAccess } from "./identity-access.js";
 import { authScript, authStyles } from "./client-inline.js";
 import { installSessionAccess } from "./session-access.js";
+import { installWorkspaceAccess } from "./workspace-access.js";
 
 export const name = "dsh-user-auth";
 export const inject = ["webServer", "apiProxy"];
@@ -109,6 +110,18 @@ export function apply(ctx, config = {}) {
     "dsh-user-auth: global request guard",
   );
   ctx.effect(() => installSessionAccess(ctx.apiProxy, identity), "dsh-user-auth: session ownership boundary");
+  if (process.env.DSH_DJ_INTERNAL_TOKEN) ctx.effect(() => installWorkspaceAccess(ctx.apiProxy, identity, async (actor, path) => {
+    const url = new URL("/internal/workspace-access", config.djBaseUrl || process.env.DSH_DJ_BASE_URL || "http://127.0.0.1:8010");
+    if (url.protocol !== "http:" || !["127.0.0.1","localhost","[::1]"].includes(url.hostname)) throw new Error("DJ must be loopback");
+    url.searchParams.set("workspace_root", path);
+    const response = await fetch(url, {headers:{"x-dsh-internal-token":process.env.DSH_DJ_INTERNAL_TOKEN,"x-dsh-user-id":actor.userId},signal:AbortSignal.timeout(10000)});
+    return response.ok && (await response.json()).ok === true;
+  }), "dsh-user-auth: workspace grants");
+
+  const deploymentId = process.env.DSH_DEPLOYMENT_ID || null;
+  exactRoute(ctx, "/auth/deployment", "GET", async (_req, res) => {
+    sendJson(res, 200, {ok: true, deploymentId});
+  });
 
   exactRoute(ctx, "/auth/session", "GET", async (req, res) => {
     const principal = identity.authenticateRequest(req);

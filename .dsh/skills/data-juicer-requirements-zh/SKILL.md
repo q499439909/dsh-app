@@ -1,49 +1,11 @@
 ---
 name: data-juicer-requirements-zh
-description: 当用户提供本地目录、数据集或批量样本，并要求筛选、分类、清洗、去重、抽样、转换、质量评估或构建数据集时使用；即使用户没有提到 Data-Juicer，也要在能力检索和方案规划前，通过 inspect_input 获取输入事实，并用 TaskSpec 澄清业务目标、判断单位、输出、语义边界、约束和验收标准。普通单文件查看、知识问答及已有 Plan 的执行或故障诊断不使用。
+description: 兼容旧会话中的 Data-Juicer 需求澄清入口；新数据处理任务统一使用 data-juicer-plan-flow-zh。
 user-invocable: true
 ---
 
-# Data-Juicer 需求澄清
+# Data-Juicer 需求澄清兼容入口
 
-只负责把自然语言需求推进到用户确认的 `requirement_ready` TaskSpec。输入事实可以自行检查；能力、算子和实现方案留给后置 `data-juicer-plan-flow-zh` Skill。
+加载 data-juicer-plan-flow-zh 并继续当前目标；已加载时直接继续。需求澄清为按需步骤，不再要求 requirement_ready 或固定需求确认。
 
-## 必经流程
-
-1. 从用户原始请求建立简明 Draft TaskSpec。区分 `known`、`unknown_discoverable` 和 `unresolved_user_owned`；TaskSpec 是决策状态，不是逐字段问卷。用户已明确给出且未被输入事实否定的目标、范围、输出、语义边界、约束和验收标准应标记为**已锁定需求**，不得仅因存在其他可探索未知项而重新打开。
-2. 输入位置足以定位且无需新增权限时，立即调用 `mcp__dj__inspect_input`，将文件数量、格式、规模、媒体元数据、生成的 dataset/manifest 路径，以及工具实际返回的结构事实回填 TaskSpec。若路径或处理范围本身不明确，先只询问这个阻塞问题。
-3. `inspect_input` 只负责输入事实。不得调用 `search_capabilities`，不得探测算子、模型、运行依赖或环境变量，不得用 shell、文件读取或自写脚本替代缺失的输入分析能力。工具未返回的事实保持 `unknown_discoverable`，不要猜测。
-4. 基于原始需求与输入事实，分轮解决所有会实质改变 Pipeline 的 `unresolved_user_owned` Material Ambiguity，而不只是在能力检索前形成技术 query 所需的问题。优先明确目标与范围、判断单位、输出制品、规模与目标分布、hard/soft 约束、语义边界、验收标准和优化取舍。不得对已锁定需求进行“再确认”、改写成新选项，或因可能存在更严格的解释而主动扩大需求。只有 `inspect_input` 返回直接冲突的事实时，才能重新询问对应事项，并必须明示冲突证据。
-5. 每轮集中提出 1–3 个相关的高影响问题；一个问题已阻塞后续澄清时先只问它。数值模糊询问范围，hard/soft 混淆询问约束等级，主观语义优先给正例、反例和边界案例。说明为什么要确认，以及不同答案会影响什么。
-6. 不向用户询问 `inspect_input` 已能取得的事实。例如视频时长、分辨率、帧率或工具实际返回的 shot 结构应自行获取；但“按整条视频判断还是定位片段”属于用户决定，必须澄清。不要为了填满 TaskSpec 而提问。若 `inspect_input` 后没有 `unresolved_user_owned` Material Ambiguity，不得再生成澄清问题，必须直接进入第 7 步。
-7. 达到 `requirement_ready` 后，向用户展示结构化需求摘要、输入概况、未决的可探索事实和可判定验收标准，并请求 `确认需求并开始能力检索`、`修改需求` 或 `取消任务`。`ask_user_question` 可用时必须调用；不可用时使用简明文本。原始请求和一般附和都不算确认。
-8. 用户确认后，保留完整的 `requirement_ready` TaskSpec 作为会话内交接契约，然后调用 `skill` 工具加载 `data-juicer-plan-flow-zh`。后置 Skill 已加载时不要重复加载，直接按交接契约继续。
-
-在第 5 和第 7 步需要弹窗时，先把原因、输入概况、TaskSpec、验收标准和其他审查材料写在普通 assistant 回复中；`ask_user_question` 仅保留一句必须决策的问题、简短选项 label，以及每个选项最多一句直接影响说明。不得把 TaskSpec、长摘要、证据列表或 Markdown 章节放入弹窗。
-
-## 快速收敛契约
-
-对用户已给出完整处理目标、输出、语义边界和可判定验收标准的任务，需求阶段的正常路径是：
-
-```text
-inspect_input → requirement_ready 摘要 → 用户确认
-```
-
-这条快路不降低用户确认门禁，只消除对已锁定需求的重复澄清。对已锁定需求的内部重述、更严格的备选解释、与 Pipeline 无关的输出目录偏好，均不得新建一轮用户问答。
-
-需要详细字段、成熟度条件或提问边界时，按需读取 [TaskSpec 与需求契约](references/task-spec.md)。普通任务不必全文展开该 reference。
-
-## 阶段门禁
-
-用户确认需求前，禁止：
-
-- 调用 `search_capabilities` 或检查具体执行环境；
-- 选择算子、模型、算法、阈值或 Recipe 参数；
-- 设计 postprocess、编写脚本或修改工作区；
-- 调用 `prepare_plan`、`approve_plan`、`run_plan`。
-
-## 工具范围
-
-- 输入事实：`mcp__dj__inspect_input`
-- 需求交互：`ask_user_question`
-- 阶段交接：`skill`
+已明确的目标、输入范围、输出和用户批准继续有效；实际执行以 DJ 保存的准确 Plan 版本与可信审批为准。旧 TaskSpec 可作为上下文，不作为额外门禁。

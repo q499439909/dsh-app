@@ -103,6 +103,26 @@ async function reconcileFromSessions(apiProxy, identityAccess, catalog, principa
   return { discovered, registered, results };
 }
 
+async function reconcileFromRuns(port, catalog, principal) {
+  if (!principal?.userId) throw new DatasetError('account_required', '请先登录', 403);
+  let cursor = '0';
+  const results = [], errors = [];
+  let discovered = 0;
+  do {
+    const page = await port.listRuns(cursor);
+    for (const origin of page.items || []) {
+      discovered++;
+      if (!['succeeded', 'cancelled'].includes(origin.status)) continue;
+      try {
+        const result = await catalog.registerRunResult(principal, null, origin);
+        if (result) results.push({ ...result, resultRef: origin.resultRef });
+      } catch (error) { errors.push({ resultRef: origin.resultRef, code: error.code || 'unavailable' }); }
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  return { discovered, registered: results.length, results, errors };
+}
+
 function registerRoute(ctx, path, methods, handler) {
   const allowed = Array.isArray(methods) ? methods : [methods];
   ctx.effect(
@@ -136,6 +156,7 @@ export function apply(ctx, config = {}) {
     baseUrl: config.baseUrl || "http://127.0.0.1:8010",
     token: config.internalToken || process.env.DSH_DJ_INTERNAL_TOKEN,
     timeoutMs: config.timeoutMs,
+    getUserId: () => ctx.identityAccess.currentPrincipal()?.userId,
   });
   const catalog = new DatasetCatalog({
     databasePath: resolve(config.databasePath || process.env.DSH_DATASET_DATABASE_PATH || ".dsh/datasets.sqlite"),
@@ -217,7 +238,7 @@ export function apply(ctx, config = {}) {
   });
 
   registerRoute(ctx, "/api/dj/datasets/reconcile", "POST", async (_req, res) => {
-    const result = await reconcileFromSessions(ctx.apiProxy, ctx.identityAccess, catalog, principal());
+    const result = await reconcileFromRuns(runOutputPort, catalog, principal());
     sendJson(res, 200, { ok: true, ...result });
   });
 }

@@ -43,7 +43,7 @@ test("list, direct access, creation and forks enforce the current owner", async 
     const listed = await app.apiProxy.sessions.list({ rpcId: "1", payload: {} });
     assert.deepEqual(listed.result.value.items.map(item => item.sessionId), ["owned"]);
     const refused = await app.apiProxy.sessions.history({ rpcId: "2", payload: { sessionId: "foreign" } });
-    assert.equal(refused.result.error.code, "session-forbidden");
+    assert.equal(refused.result.error.code, "bad-request");
     const created = await app.apiProxy.sessions.create({ rpcId: "3", payload: {} });
     assert.equal(app.owners.get(created.result.value.sessionId), "user-a");
     await app.apiProxy.sessions.fork({ rpcId: "4", payload: { sessionId: "owned" } });
@@ -65,7 +65,7 @@ test("subagent controls, log downloads, and responses use the parent session bou
   const app = fixture();
   try {
     const refused = await app.apiProxy.subagents.list({ rpcId: "sub", payload: { parentSessionId: "foreign" } });
-    assert.equal(refused.result.error.code, "session-forbidden");
+    assert.equal(refused.result.error.code, "bad-request");
     const download = await app.apiProxy.downloads.sessionLog({ sessionId: "foreign" });
     assert.equal(download.status, 403);
     const response = await app.apiProxy.respond({ rpcId: "answer", result: { ok: true, value: { sessionId: "foreign" } } });

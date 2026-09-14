@@ -125,10 +125,10 @@ export class DatasetCatalog {
 
   async registerRunResult(principal, sessionId, origin) {
     requirePrincipal(principal);
-    if (!this.identityAccess.canAccessSession(principal, sessionId)) {
+    if (sessionId !== null && !this.identityAccess.canAccessSession(principal, sessionId)) {
       throw new DatasetError("session_not_found", "找不到对应对话", 404);
     }
-    const ownerUserId = this.identityAccess.sessionOwner(sessionId);
+    const ownerUserId = sessionId === null ? principal.userId : this.identityAccess.sessionOwner(sessionId);
     if (!ownerUserId) throw new DatasetError("result_unclaimed", "运行结果没有可确认的所有者", 409);
     if (principal.role !== "admin" && ownerUserId !== principal.userId) {
       throw new DatasetError("session_not_found", "找不到对应对话", 404);
@@ -144,17 +144,17 @@ export class DatasetCatalog {
     }
     const key = originKey(normalizedOrigin);
     const existing = this.db.prepare("SELECT * FROM datasets WHERE origin_key = ?").get(key);
+    const inspected = await this.runOutputPort.inspect(normalizedOrigin);
+    if (!inspected?.eligible || !Array.isArray(inspected.assets) || inspected.assets.length === 0) return null;
     if (existing) {
       if (existing.owner_user_id !== ownerUserId) {
         throw new DatasetError("result_owner_conflict", "运行结果已经属于其他用户", 409);
       }
-      return existing.deleted_at === null ? publicDataset(existing) : null;
+      if (existing.deleted_at !== null) return null;
     }
 
-    const inspected = await this.runOutputPort.inspect(normalizedOrigin);
-    if (!inspected?.eligible || !Array.isArray(inspected.assets) || inspected.assets.length === 0) return null;
     const status = inspected.status === "available" ? "available" : "partial";
-    const datasetId = opaqueId("ds");
+    const datasetId = existing?.dataset_id || opaqueId("ds");
     const row = {
       dataset_id: datasetId,
       origin_key: key,
@@ -191,7 +191,11 @@ export class DatasetCatalog {
         @task_id, @plan_version, @result_ref, @internal_run_id, @title, @status,
         @created_at, @completed_at, @manifest_hash, @file_count, @total_bytes, @record_count,
         @labels_json, @metrics_json, @media_types_json, @assets_json, @indexed_at
-      )
+      ) ON CONFLICT(origin_key) DO UPDATE SET
+        status=excluded.status, title=excluded.title, manifest_hash=excluded.manifest_hash,
+        file_count=excluded.file_count,total_bytes=excluded.total_bytes,record_count=excluded.record_count,
+        labels_json=excluded.labels_json,metrics_json=excluded.metrics_json,media_types_json=excluded.media_types_json,
+        assets_json=excluded.assets_json,indexed_at=excluded.indexed_at,completed_at=excluded.completed_at
     `).run(row);
     return publicDataset(row);
   }

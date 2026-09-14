@@ -49,6 +49,7 @@ function fixture() {
     },
   };
   const runOutputPort = {
+    async listRuns() { return { ok: true, items: principal.userId === "usr_a" ? [{workspaceRoot:"D:\\private-workspace", taskId:"task_result", planVersion:"plan_v001", resultRef:"run_r001", status:"succeeded"}] : [], nextCursor: null }; },
     async inspect(origin) {
       return {
         eligible: true,
@@ -105,7 +106,7 @@ test("discovers run origins from nested persisted tool results", () => {
   assert.deepEqual(origins, [{ workspaceRoot: "D:\\workspace", taskId: "task_1", planVersion: "plan_v001", resultRef: "run_r001" }]);
 });
 
-test("reconciles only accessible conversations and keeps paths out of public responses", async () => {
+test("reconciles server-owned runs without trusting chat origins and keeps paths private", async () => {
   const app = fixture();
   try {
     const reconcile = await invoke(app.routes.get("/api/dj/datasets/reconcile"), request("POST", "/api/dj/datasets/reconcile", {}));

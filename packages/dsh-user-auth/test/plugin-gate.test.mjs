@@ -172,3 +172,15 @@ test("logout revokes the server session and clears its cookie", async () => {
     await app.dispose();
   }
 });
+
+
+test('deployment identity is captured at startup without exposing configuration or credentials', async()=>{
+  const previous=process.env.DSH_DEPLOYMENT_ID;
+  process.env.DSH_DEPLOYMENT_ID='sha256:started';
+  const app=fixture();
+  try {
+    process.env.DSH_DEPLOYMENT_ID='sha256:later';
+    const res=await invoke(app.routes.get('/auth/deployment'),request('GET','/auth/deployment'));
+    assert.deepEqual(JSON.parse(res.body),{ok:true,deploymentId:'sha256:started'});
+  } finally {await app.dispose();if(previous===undefined)delete process.env.DSH_DEPLOYMENT_ID;else process.env.DSH_DEPLOYMENT_ID=previous;}
+});

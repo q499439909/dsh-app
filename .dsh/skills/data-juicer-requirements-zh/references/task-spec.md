@@ -1,3 +1,5 @@
+> 历史模板：不再作为当前流程的必填前置门禁。当前入口见 data-juicer-plan-flow-zh。
+
 # TaskSpec 与需求契约
 
 ## 状态与未知项

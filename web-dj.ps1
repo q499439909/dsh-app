@@ -1,4 +1,13 @@
 param(
+    [string]$DeploymentFile,
+    [string]$DjRoot,
+    [string]$PythonExe,
+    [string]$WorkspaceRoot,
+    [string]$CacheRoot,
+    [string]$ProxyUrl,
+    [switch]$EnableObservability,
+    [switch]$CheckOnly,
+    [switch]$NoOpen,
     [ValidateRange(1, 65535)]
     [int]$Port = 57035,
     [ValidateRange(1, 65535)]
@@ -10,17 +19,44 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$dshRoot = 'D:\dsh-app'
-$djRoot = 'D:\dj\data-juicer-1.5.4'
-$dshBin = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh\lib\bin.js'
-$patchFile = Join-Path $dshRoot 'dj-dsh.patch.yml'
-$pythonExe = 'D:\dj\.envs\dsh-dj\python.exe'
-$runtimeProbe = Join-Path $dshRoot 'scripts\test-dj-runtime.ps1'
-$hfScripts = 'D:\dj\.envs\dsh-dj\Scripts'
-$hfHome = 'D:\shishi\.cache\huggingface'
+$dshRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($DeploymentFile)) { $DeploymentFile = Join-Path $dshRoot 'dsh-deployment.json' }
+$deploymentOverrides = @{}
+foreach ($mapping in @(@('DjRoot','djRoot'), @('PythonExe','pythonExe'), @('WorkspaceRoot','workspaceRoot'), @('CacheRoot','hfHome'), @('ProxyUrl','proxyUrl'), @('Port','webPort'), @('McpPort','djPort'), @('ExecutionMode','executionMode'))) {
+    if ($PSBoundParameters.ContainsKey($mapping[0])) { $deploymentOverrides[$mapping[1]] = $PSBoundParameters[$mapping[0]] }
+}
+if ($PSBoundParameters.ContainsKey('EnableObservability')) { $deploymentOverrides['observability'] = [bool]$EnableObservability }
+$manifestScript = Join-Path $dshRoot 'scripts/deployment-manifest.mjs'
+$manifestArgs = @($manifestScript, $DeploymentFile)
+if (-not $CheckOnly) { $manifestArgs += '--write' }
+$previousDeploymentOverrides = $env:DSH_DEPLOYMENT_OVERRIDES
+try {
+    $env:DSH_DEPLOYMENT_OVERRIDES = ConvertTo-Json -InputObject $deploymentOverrides -Compress
+    $manifestJson = & node @manifestArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the DSH/DJ deployment manifest.' }
+} finally { $env:DSH_DEPLOYMENT_OVERRIDES = $previousDeploymentOverrides }
+$deployment = $manifestJson | ConvertFrom-Json
+if ($CheckOnly) { $manifestJson; exit 0 }
+$djRoot = $deployment.config.djRoot
+$pythonExe = $deployment.config.pythonExe
+$WorkspaceRoot = $deployment.config.workspaceRoot
+$Port = $deployment.config.webPort
+$McpPort = $deployment.config.djPort
+$ExecutionMode = $deployment.config.executionMode
+$proxyUrl = $deployment.config.proxyUrl
+$dshBin = Join-Path $dshRoot 'node_modules/@deepseek-ai/dsh/lib/bin.js'
+$patchFile = Join-Path $dshRoot '.dsh/deployment/dj.patch.yml'
+$runtimeProbe = Join-Path $dshRoot 'scripts/test-dj-runtime.ps1'
+$pythonDirectory = Split-Path -Parent $pythonExe
+$hfScripts = if ((Split-Path -Leaf $pythonDirectory) -eq 'Scripts') { $pythonDirectory } else { Join-Path $pythonDirectory 'Scripts' }
+$hfHome = $deployment.config.hfHome
 $mcpTempDir = Join-Path $djRoot '.mcp-tmp'
+[Environment]::SetEnvironmentVariable('DSH_DJ_BASE_URL', "http://127.0.0.1:$McpPort", 'Process')
+[Environment]::SetEnvironmentVariable('DSH_DEPLOYMENT_ID', $deployment.deploymentId, 'Process')
+[Environment]::SetEnvironmentVariable('DSH_DJ_EXPECTED_BUILD', ($deployment.dj.build | ConvertTo-Json -Compress), 'Process')
 $mcpEnvFile = Join-Path $dshRoot 'dj-plan-flow.env'
 $authEnvFile = Join-Path $dshRoot 'dsh-auth.env'
+$langfuseEnvFile = Join-Path $dshRoot 'loongsuite-langfuse.env'
 $operatorPluginSource = Join-Path $dshRoot 'packages\dsh-dj-operator-library'
 $planPluginSource = Join-Path $dshRoot 'packages\dsh-dj-plan-explorer'
 $authPluginSource = Join-Path $dshRoot 'packages\dsh-user-auth'
@@ -28,7 +64,7 @@ $datasetPluginSource = Join-Path $dshRoot 'packages\dsh-dj-datasets'
 $webFetchPluginSource = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh-web-fetch-http'
 $internalTokenPath = Join-Path $dshRoot '.dsh\dj-internal-token'
 $dshProfileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\profiles\web'
-$proxyUrl = 'http://127.0.0.1:15236'
+$dshCredentialsFile = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh\.credentials.yaml'
 $noProxy = '127.0.0.1,localhost,::1'
 $operatorPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\operator-library'
 $planPluginLink = Join-Path $dshProfileRoot 'node_modules\@dsh-dj\plan-explorer'
@@ -69,6 +105,39 @@ function Read-DotEnv {
     return $values
 }
 
+function Read-DshCredential {
+    param(
+        [string]$Path,
+        [string]$Name
+    )
+
+    if ($Name -notin @('HS_API_KEY', 'BL_API_KEY')) {
+        throw "Unsupported DSH credential reference: $Name"
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Cannot find the DSH credential store: $Path"
+    }
+
+    $pattern = '^\s*' + [regex]::Escape($Name) + '\s*:\s*(?<value>.+?)\s*$'
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $match = [regex]::Match($line, $pattern)
+        if (-not $match.Success) {
+            continue
+        }
+        $value = $match.Groups['value'].Value.Trim()
+        if ($value.Length -ge 2 -and (
+            ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))
+        )) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+    throw "Credential $Name is missing or empty in $Path"
+}
+
 if (-not (Test-Path -LiteralPath $dshBin)) {
     throw "Cannot find dsh: $dshBin"
 }
@@ -78,7 +147,7 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
 if (-not (Test-Path -LiteralPath $runtimeProbe -PathType Leaf)) {
     throw "Cannot find the Data-Juicer runtime probe: $runtimeProbe"
 }
-$runtimeProbeOutput = @(& $runtimeProbe -PythonExe $pythonExe 2>&1)
+$runtimeProbeOutput = @(& $runtimeProbe -PythonExe $pythonExe -DjRoot $djRoot -Profile planning 2>&1)
 if ($LASTEXITCODE -ne 0) {
     throw "The Data-Juicer Python environment is unhealthy.`n$($runtimeProbeOutput -join [Environment]::NewLine)"
 }
@@ -172,8 +241,34 @@ foreach ($name in @('DSH_REGISTRATION_INVITE_HASH', 'DSH_AUTH_DATABASE_PATH', 'D
     }
 }
 $mcpEnvironment = Read-DotEnv -Path $mcpEnvFile
+$apiKeyCredential = $mcpEnvironment['DJ_PLAN_FLOW_OPENAI_API_KEY_CREDENTIAL']
+if (-not [string]::IsNullOrWhiteSpace($apiKeyCredential)) {
+    $mcpEnvironment['OPENAI_API_KEY'] = Read-DshCredential -Path $dshCredentialsFile -Name $apiKeyCredential
+}
+$langfuseEnvironment = @{}
+if ($deployment.config.observability) { $langfuseEnvironment = Read-DotEnv -Path $langfuseEnvFile }
+$langfuseEndpoint = $null
+$langfuseOtlpHeaders = $null
+if ($deployment.config.observability) {
+$requiredLangfuseNames = @('LANGFUSE_OTLP_ENDPOINT', 'LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY')
+foreach ($name in $requiredLangfuseNames) {
+    if (-not $langfuseEnvironment.ContainsKey($name) -or [string]::IsNullOrWhiteSpace($langfuseEnvironment[$name])) {
+        throw "Missing $name in $langfuseEnvFile."
+    }
+}
+$langfuseEndpoint = $langfuseEnvironment['LANGFUSE_OTLP_ENDPOINT'].Trim().TrimEnd('/')
+$langfuseEndpointUri = $null
+if (-not [Uri]::TryCreate($langfuseEndpoint, [UriKind]::Absolute, [ref]$langfuseEndpointUri) -or
+    $langfuseEndpointUri.Scheme -ne 'https' -or
+    $langfuseEndpointUri.Host -notin @('cloud.langfuse.com', 'us.cloud.langfuse.com', 'jp.cloud.langfuse.com', 'hipaa.cloud.langfuse.com')) {
+    throw "LANGFUSE_OTLP_ENDPOINT must be an HTTPS Langfuse Cloud OTLP endpoint."
+}
+$langfuseCredential = "$($langfuseEnvironment['LANGFUSE_PUBLIC_KEY']):$($langfuseEnvironment['LANGFUSE_SECRET_KEY'])"
+$langfuseAuthorization = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($langfuseCredential))
+$langfuseOtlpHeaders = "Authorization=Basic%20$langfuseAuthorization,x-langfuse-ingestion-version=4"
+}
 # One cache configuration inherited by DSH, MCP, validation and native workers.
-# Process overrides win; model-backend-specific variables keep their existing semantics.
+# HF_HOME follows the resolved deployment; other cache variables retain process/env overrides.
 $cacheEnvironmentNames = @('CACHE_HOME', 'XDG_CACHE_HOME', 'DATA_JUICER_CACHE_HOME', 'DATA_JUICER_ASSETS_CACHE',
     'DATA_JUICER_MODELS_CACHE', 'DATA_JUICER_EXTERNAL_MODELS_HOME', 'HF_HOME', 'HF_HUB_CACHE',
     'HUGGINGFACE_HUB_CACHE', 'TRANSFORMERS_CACHE', 'TORCH_HOME', 'MODELSCOPE_CACHE', 'DSH_USER_DATA_ROOT',
@@ -183,7 +278,7 @@ foreach ($cacheName in $cacheEnvironmentNames) {
     if ([string]::IsNullOrWhiteSpace($cacheValue) -and $mcpEnvironment.ContainsKey($cacheName)) {
         $cacheValue = $mcpEnvironment[$cacheName]
     }
-    if ([string]::IsNullOrWhiteSpace($cacheValue) -and $cacheName -eq 'HF_HOME') { $cacheValue = $hfHome }
+    if ($cacheName -eq 'HF_HOME') { $cacheValue = $hfHome }
     if ([string]::IsNullOrWhiteSpace($cacheValue) -and $cacheName -eq 'DSH_USER_DATA_ROOT') { $cacheValue = Join-Path $dshRoot '.dsh\users' }
     if (-not [string]::IsNullOrWhiteSpace($cacheValue)) { [Environment]::SetEnvironmentVariable($cacheName, $cacheValue, 'Process') }
 }
@@ -259,6 +354,13 @@ function Get-OtherDshWebProcesses {
     )
 }
 
+function ConvertTo-ProcessArgument {
+    param([AllowEmptyString()][string]$Argument)
+    $escaped = [regex]::Replace($Argument, '(\\*)"', '$1$1\"')
+    $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
+    return '"' + $escaped + '"'
+}
+
 function Start-ProcessWithEnvironment {
     param(
         [Parameter(Mandatory = $true)]
@@ -282,12 +384,19 @@ function Start-ProcessWithEnvironment {
             [Environment]::SetEnvironmentVariable($name, [string]$entry.Value, 'Process')
         }
 
-        return Start-Process `
+        $diagnosticRoot = Join-Path $WorkspaceRoot '.dsh/diagnostics/runtime'
+        New-Item -ItemType Directory -Path $diagnosticRoot -Force | Out-Null
+        $launchKey = [guid]::NewGuid().ToString('N')
+        $child = Start-Process `
             -FilePath $FilePath `
-            -ArgumentList $ArgumentList `
+            -ArgumentList (($ArgumentList | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join ' ') `
             -WorkingDirectory $WorkingDirectory `
             -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $diagnosticRoot "$launchKey.stdout.log") `
+            -RedirectStandardError (Join-Path $diagnosticRoot "$launchKey.stderr.log") `
             -PassThru
+        @{ at = [DateTime]::UtcNow.ToString('o'); event = 'process_started'; pid = $child.Id; executable = $FilePath; launch_id = $launchKey } | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $diagnosticRoot 'lifecycle.jsonl')
+        return $child
     } finally {
         foreach ($entry in $previous.GetEnumerator()) {
             [Environment]::SetEnvironmentVariable([string]$entry.Key, $entry.Value, 'Process')
@@ -295,13 +404,25 @@ function Start-ProcessWithEnvironment {
     }
 }
 
+function Assert-DjService {
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:$McpPort/internal/health" -Headers @{ 'x-dsh-internal-token' = $internalToken } -TimeoutSec 10
+    if (-not $health.ok -or $health.protocol.name -ne 'dsh-dj-internal-http' -or $health.protocol.version -ne 1 -or $health.execution_mode -ne $ExecutionMode) {
+        throw 'The listening DJ service is unhealthy or incompatible with this deployment.'
+    }
+    foreach ($property in $deployment.dj.build.PSObject.Properties) {
+        if ($health.build.($property.Name) -ne $property.Value) { throw "Running DJ build differs at $($property.Name); restart DJ before launching DSH." }
+    }
+    Write-Host 'DJ planning, account control and deployment handshake passed; execution prerequisites remain plan-specific.'
+}
+
 if (-not (Test-TcpPort -TargetPort $McpPort)) {
-    Write-Host "Starting Data-Juicer plan-flow MCP at http://127.0.0.1:$McpPort/mcp"
+    Write-Host "Starting Data-Juicer gateway at http://127.0.0.1:$McpPort/internal/operator-tools (MCP also available at /mcp)"
     $mcpArgs = @('-m', 'data_juicer.tools.mcp_server', 'plan-flow', '--transport', 'streamable-http', '--port', $McpPort)
     $mcpProcessEnvironment = @{
         TEMP = $mcpTempDir
         TMP = $mcpTempDir
         TMPDIR = $mcpTempDir
+        PYTHONPATH = $djRoot
         PYTHONUTF8 = '1'
         PYTHONIOENCODING = 'utf-8'
         DJ_PLAN_FLOW_CONFIG_FILE = $mcpEnvFile
@@ -347,6 +468,8 @@ if (-not (Test-TcpPort -TargetPort $McpPort)) {
     Write-Warning "Using the MCP process already listening on port $McpPort. The current $mcpEnvFile was not reloaded; restart that MCP process after changing credentials or server code."
 }
 
+Assert-DjService
+
 $otherDshProcesses = Get-OtherDshWebProcesses -ExceptPort $Port
 if ($otherDshProcesses.Count -gt 0) {
     $descriptions = @(
@@ -368,8 +491,10 @@ if ($null -ne $listeningProcess) {
         throw "Port $Port is already owned by PID $($listeningProcess.ProcessId), which is not the expected DSH Web process."
     }
 
+    $runningDeployment = Invoke-RestMethod -Uri "${url}auth/deployment" -TimeoutSec 5
+    if ($runningDeployment.deploymentId -ne $deployment.deploymentId) { throw 'Running DSH deployment differs; restart DSH to load the new plugins, skills and configuration.' }
     Write-Host "Using existing DSH DJ at $url (PID $($listeningProcess.ProcessId))"
-    Start-Process $url
+    if (-not $NoOpen) { Start-Process $url }
     exit 0
 }
 
@@ -389,10 +514,14 @@ try {
         NODE_USE_ENV_PROXY = '1'
         PATH = "$hfScripts;$env:PATH"
     }
+    if ($deployment.config.observability) {
+        $dshProcessEnvironment['OTEL_EXPORTER_OTLP_ENDPOINT'] = $langfuseEndpoint
+        $dshProcessEnvironment['OTEL_EXPORTER_OTLP_HEADERS'] = $langfuseOtlpHeaders
+    }
     $process = Start-ProcessWithEnvironment `
         -FilePath 'node.exe' `
         -ArgumentList $dshArgumentList `
-        -WorkingDirectory $dshRoot `
+        -WorkingDirectory $WorkspaceRoot `
         -Environment $dshProcessEnvironment
 
     for ($attempt = 0; $attempt -lt 40 -and -not $process.HasExited; $attempt++) {
@@ -400,8 +529,27 @@ try {
         try {
             $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1
             if ($response.StatusCode -eq 200) {
-                Start-Process $url
-                Wait-Process -Id $process.Id
+                $runningDeployment = Invoke-RestMethod -Uri "${url}auth/deployment" -TimeoutSec 5
+                if ($runningDeployment.deploymentId -ne $deployment.deploymentId) { throw 'DSH has not loaded the requested deployment.' }
+                if (-not $NoOpen) { Start-Process $url }
+                $mcpRestarts = 0
+                $mcpExitRecorded = $false
+                while (-not $process.HasExited) {
+                    Start-Sleep -Milliseconds 1000
+                    $process.Refresh()
+                    if ($null -ne $mcpProcess -and $mcpProcess.HasExited -and -not $mcpExitRecorded) {
+                        @{ at = [DateTime]::UtcNow.ToString('o'); event = 'process_exited'; service = 'dj'; pid = $mcpProcess.Id; exit_code = $mcpProcess.ExitCode; restart_attempt = $mcpRestarts } | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $WorkspaceRoot '.dsh/diagnostics/runtime/lifecycle.jsonl')
+                        if ($mcpRestarts -lt 3 -and -not (Test-TcpPort -TargetPort $McpPort)) {
+                            $mcpRestarts++
+                            $mcpProcess = Start-ProcessWithEnvironment -FilePath $pythonExe -ArgumentList $mcpArgs -WorkingDirectory $djRoot -Environment $mcpProcessEnvironment
+                        } else {
+                            $mcpExitRecorded = $true
+                            Write-Warning 'DJ recovery stopped after three attempts or because its port is occupied. Inspect runtime logs and rerun web-dj.ps1; existing dispatch IDs are preserved.'
+                        }
+                    }
+                }
+                $process.Refresh()
+                @{ at = [DateTime]::UtcNow.ToString('o'); event = 'process_exited'; pid = $process.Id; exit_code = $process.ExitCode; recovery = 'Rerun web-dj.ps1; durable dispatch resumes with original request IDs' } | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $WorkspaceRoot '.dsh/diagnostics/runtime/lifecycle.jsonl')
                 exit $process.ExitCode
             }
         } catch {

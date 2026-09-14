@@ -14,6 +14,7 @@ export class RunOutputHttpAdapter {
     this.token = String(options.token || "");
     if (!this.token) throw new Error("run-output-http: internal token is required");
     this.fetch = options.fetch ?? globalThis.fetch;
+    this.getUserId = options.getUserId;
     this.timeoutMs = Math.max(1000, Math.min(Number(options.timeoutMs) || 30000, 120000));
   }
 
@@ -27,7 +28,15 @@ export class RunOutputHttpAdapter {
   }
 
   headers(extra = {}) {
-    return { "x-dsh-internal-token": this.token, ...extra };
+    const userId = this.getUserId?.();
+    if (this.getUserId && !userId) throw new DatasetError("account_required", "请先登录", 403);
+    return { "x-dsh-internal-token": this.token, ...(userId ? {"x-dsh-user-id": userId} : {}), ...extra };
+  }
+
+  async listRuns(cursor = "0") {
+    const url = new URL("/internal/task-runs", this.baseUrl);
+    url.searchParams.set("cursor", cursor);
+    return this.json(await this.fetch(url, { headers: this.headers(), signal: AbortSignal.timeout(this.timeoutMs) }));
   }
 
   async inspect(origin) {
@@ -35,7 +44,9 @@ export class RunOutputHttpAdapter {
       headers: this.headers({ accept: "application/json" }),
       signal: AbortSignal.timeout(this.timeoutMs),
     });
-    return this.json(response);
+    const result = await this.json(response);
+    if (result.eligible && this.getUserId && result.ownerId !== this.getUserId()) throw new DatasetError("result_owner_conflict", "结果所有者不匹配", 403);
+    return result;
   }
 
   async openAsset(origin, assetId, options = {}) {

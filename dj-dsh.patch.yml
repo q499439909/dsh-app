@@ -48,11 +48,11 @@
       name: '@dsh-dj/datasets'
       config:
         baseUrl: http://127.0.0.1:8010
-    - id: mcp-dj
+    - id: dj-http-gateway
       name: '@dsh-dj/user-auth/dj-bridge'
       config:
         serverName: dj
-        transport: streamable-http
-        url: http://127.0.0.1:8010/mcp
+        transport: internal-http
+        baseUrl: http://127.0.0.1:8010
         toolCallTimeoutMs: 1800000
         failOnStartupError: true

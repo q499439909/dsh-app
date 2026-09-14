@@ -1,10 +1,16 @@
 # Local credentials for the Data-Juicer plan-flow MCP.
 dj-plan-flow.env
 dsh-auth.env
+loongsuite-langfuse.env
 .dsh/auth.sqlite*
 .dsh/datasets.sqlite*
 .dsh/dj-internal-token
+.dsh/dj-workflow.sqlite*
+.dsh/diagnostics/
 
 # Installed dependencies and local runtime artifacts.
 node_modules/
 *.log
+
+# Resolved deployment fingerprints and generated launch patch.
+.dsh/deployment/

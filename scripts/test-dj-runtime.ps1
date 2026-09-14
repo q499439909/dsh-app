@@ -1,6 +1,9 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$PythonExe
+    [string]$PythonExe,
+    [string]$DjRoot,
+    [ValidateSet('planning', 'face')]
+    [string]$Profile = 'planning'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +17,15 @@ $probe = @'
 from importlib.metadata import PackageNotFoundError, version
 import os
 import sys
+
+if sys.argv[1] == 'planning':
+    from data_juicer.tools.plan_flow.runtime_environment_lock import freeze_runtime_lock
+    for package in ('mcp', 'starlette', 'pydantic', 'filelock', 'psutil'):
+        version(package)
+    lock = freeze_runtime_lock()
+    print(f"DJ planning runtime OK: python={sys.version.split()[0]}; uv.lock={lock['sha256']}")
+    print("GPU/model/face dependencies are checked only for plans that use them.")
+    sys.exit(0)
 
 opencv_distributions = []
 for name in (
@@ -70,7 +82,12 @@ for package, expected_version in runtime_lock["audited_packages"].items():
         )
 '@
 
-$probeOutput = @(& $PythonExe -c $probe 2>&1)
-$probeExitCode = $LASTEXITCODE
+$previousPythonPath = $env:PYTHONPATH
+try {
+    if ($DjRoot) { $env:PYTHONPATH = $DjRoot }
+    # stdin avoids Windows PowerShell 5.1 losing quotes in multiline -c code.
+    $probeOutput = @($probe | & $PythonExe -X utf8 - $Profile 2>&1)
+    $probeExitCode = $LASTEXITCODE
+} finally { $env:PYTHONPATH = $previousPythonPath }
 $probeOutput | ForEach-Object { Write-Output $_ }
 exit $probeExitCode
