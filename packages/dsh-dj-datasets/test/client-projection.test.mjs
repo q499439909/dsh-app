@@ -50,6 +50,25 @@ test("projects run tool results into a conversation-scoped result card", () => {
   assert.equal(state.runs[0].value.run.result_ref, "run_r001");
 });
 
+test("projects the confirmed Run immediately and formats live progress", () => {
+  const definition = clientModule.resultProjectionDefinition;
+  let state = definition.start({}, { event: { data: { turn: 4 } } });
+  state = definition.update({ state }, { event: { type: "tool/call", data: { callId: "call_2", name: "mcp__dj__confirm_plan" } } });
+  state = definition.update({ state }, { event: { type: "tool/result", seq: 10, data: {
+    message: { source: { callId: "call_2" }, content: [{ type: "text", text: JSON.stringify({
+      ok: true, workspace_root: "D:\\workspace", task_id: "task_2", plan_version: "plan_v001",
+      run: { run_id: "run_2", task_id: "task_2", status: "running" },
+    }) }] }, surfaceOp: "append",
+  } } });
+  assert.equal(state.runs.length, 1);
+  assert.equal(clientModule.runProgressText({status:'running',execution_phase:'processing',progress:{step_index:2,step_total:5,processed:320,total:1000,percent:32}}),
+    '处理中 · processing · 第 2/5 步 · 320/1000 · 32%');
+  assert.equal(clientModule.runProgressText({status:'running',steps:[
+    {process_index:0,operator_name:'first_mapper',status:'succeeded',input_rows:10,output_rows:10},
+    {process_index:1,operator_name:'second_filter',status:'running'},
+  ]}),'处理中 · second_filter · 第 2/2 步 · 50%');
+});
+
 test("groups variants of one sample while keeping dataset files as attachments", () => {
   const presentation = clientModule.buildResultPresentation([
     { assetId: "mask_1", itemId: "mask_0001", sampleId: "0001", variant: "mask", name: "0001 mask.png", mediaType: "image/png", labels: ["蒙版"], metrics: { score: 0.8 } },

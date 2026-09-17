@@ -121,6 +121,7 @@ window.__ModuleLoader__.load({
       return h(React.Fragment,null,...matched.plans.filter(item=>!isPlanDismissed(sessionId,item.ref)).map(item=>h(PlanCard,{planRef:item.ref,sessionId,t,onAction,onClose:()=>{dismissPlan(sessionId,item.ref);refresh()},key:planKey(item.ref)})));
     }
     function SessionPlanScope({sessionId,onAction}){
+      const progressText=run=>{if(!run||['succeeded','failed','cancelled'].includes(run.status))return'';const steps=Array.isArray(run.steps)?run.steps:[],active=steps.find(step=>step.status==='running')||[...steps].reverse().find(step=>step.status==='succeeded'),done=steps.filter(step=>['succeeded','skipped'].includes(step.status)).length,index=active?Number(active.process_index)+1:null,percent=steps.length?Math.round(done/steps.length*100):null,parts=[];if(active?.operator_name)parts.push(active.operator_name);if(Number.isFinite(index)&&steps.length)parts.push(`第 ${index}/${steps.length} 步`);if(Number.isFinite(percent))parts.push(`${percent}%`);return parts.join(' · ')};
       const[items,setItems]=React.useState([]),[connection,setConnection]=React.useState("online"),[activity,setActivity]=React.useState([]),[refreshKey,reload]=React.useReducer(x=>x+1,0),[actionError,setActionError]=React.useState(""),[busy,setBusy]=React.useState(false);
       React.useEffect(()=>{setItems([]);setActivity([]);setConnection("online");setActionError("")},[sessionId]);
       React.useEffect(()=>{
@@ -161,6 +162,7 @@ window.__ModuleLoader__.load({
         ...latest.map(ref=>h('section',{key:planKey(ref),className:'djTaskDetail'},
           h('strong',null,ref.title||ref.task_id),h('p',null,`${labels[ref.workflow_state]||'正在同步'} · ${ref.plan_version}${ref.run?' · '+ref.run.run_id:''}`),
           ref.decision_id?h('p',null,'审批已保存，运行状态由服务持续维护。'):null,
+          progressText(ref.run)?h('p',{role:'status'},progressText(ref.run)):null,
           ref.connection_state?h('p',{role:'status'},'暂时无法同步运行状态，以下为最后已知状态。'):null,
           ref.run?.status==='failed'?h('p',{role:'alert'},ref.error_code?.startsWith('MODEL_')?'运行失败：模型文件尚未准备完整。':ref.error_code?.startsWith('RUNTIME_')?'运行失败：运行环境与锁定版本不一致。':'运行失败，请展开诊断详情。'):null,
           h('div',{className:'djPlanCardActions'},h('button',{className:'djPlanButton',onClick:()=>openPage({kind:'plan',planRef:ref})},'查看方案与结果'),

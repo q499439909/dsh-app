@@ -11,7 +11,7 @@ user-invocable: true
 ## 主流程
 
 1. 缺少输入事实时调用 inspect_input；继续任务时用 get_workflow_status/get_plan/get_run 恢复。路径、判断单位、输出或成本边界存在实质歧义时才询问，见 [澄清指南](references/clarification.md)。用户已说明的需求直接沿用。
-2. 用 search_capabilities 搜索所需行为，再对相关候选调用 get_capability_schemas。证据足够就编排；有明确未覆盖行为才补查。检索分数不等于质量保证。
+2. 用 search_capabilities 搜索所需行为，再对相关候选调用 get_capability_schemas。证据足够就编排；有明确未覆盖行为才补查。检索分数不等于质量保证。get_capability_schemas 返回的参数表和 output_contract 已包含编排所需的全部信息（参数含义、默认值、输出字段路径、响应结构、归一化规则）；不要为了"确认 input_template 占位符""了解图片如何注入""查看默认 prompt"等编排无关的内部实现去读算子源码。只有契约冲突、工具异常或结果不符时才按"有目的的诊断"读取相关源码。
 3. 首次需要 Plan 字段/报告规则时调用 get_plan_contract，组织 recipe、必要 postprocess 和 expected_outputs。图像分数/淘汰原因/阶段计数优先用 image_audit；它在 Run 中全量打分，再按规则判定，成本在审批前说明。每项需求记录 covered / gap / needs_user_input 与证据；不能用人脸数量或面积代替清晰度。最小例子见 [Plan 契约](references/plan-contract.md)。目标仅为方案时，生成可审查 Plan 后交付即可。
 4. 任务授权范围内可以准备脚本和调用 prepare_plan 创建草案；不要提前执行数据处理。工具返回校验错误或 runtime blockers 时先修正或报告阻断。
 5. prepare_plan 成功后给出简短摘要，直接调用 confirm_plan；其问答详情提供准确版本、全部节点、规则、输出、缺口和实测模型准备成本，不在聊天中重复整份 JSON。该工具使用宿主结构化问答，绑定 task_id、plan_version、content_hash；用户选择后宿主持久化审批并自动启动。卡片是可选入口。普通 ask_user_question 用于澄清；执行确认复用同一问答机制，由 confirm_plan 记录版本绑定。

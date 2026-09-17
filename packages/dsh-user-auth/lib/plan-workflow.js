@@ -11,22 +11,48 @@ const stateOf = (status,run) => status==='queued'?'queued':status==='blocked'?'b
 
 /** The approval identifies content; each explicit execution attempt has its own durable request. */
 export class PlanWorkflow {
-  constructor({databasePath,invoke}) {
+  constructor({databasePath,invoke,publishReport}) {
     mkdirSync(dirname(databasePath),{recursive:true});this.db=new DatabaseSync(databasePath);
-    this.invoke=invoke;this.inflight=new Map();this.refreshing=new Map();
+    this.invoke=invoke;this.publishReport=publishReport;this.inflight=new Map();this.refreshing=new Map();
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS session_plans(user_id TEXT NOT NULL,session_id TEXT NOT NULL,plan_key TEXT NOT NULL,ref TEXT NOT NULL,updated INTEGER NOT NULL,PRIMARY KEY(user_id,session_id,plan_key));
       CREATE TABLE IF NOT EXISTS plan_decisions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,session_id TEXT NOT NULL,plan_key TEXT NOT NULL,ref TEXT NOT NULL,status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,result TEXT,error TEXT,created INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS pending_decisions ON plan_decisions(status,retry_at);
       CREATE TABLE IF NOT EXISTS workflow_events(user_id TEXT NOT NULL,session_id TEXT NOT NULL,at INTEGER NOT NULL,event TEXT NOT NULL,summary TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS session_workflow_events ON workflow_events(user_id,session_id,at);
-      CREATE TABLE IF NOT EXISTS run_attempts(id TEXT PRIMARY KEY,decision_id TEXT NOT NULL,retry_of TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,result TEXT,error TEXT,created INTEGER NOT NULL,refreshed_at INTEGER NOT NULL DEFAULT 0,UNIQUE(decision_id,retry_of));`);
+      CREATE TABLE IF NOT EXISTS run_attempts(id TEXT PRIMARY KEY,decision_id TEXT NOT NULL,retry_of TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,result TEXT,error TEXT,created INTEGER NOT NULL,refreshed_at INTEGER NOT NULL DEFAULT 0,UNIQUE(decision_id,retry_of));
+      CREATE TABLE IF NOT EXISTS run_report_outbox(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,session_id TEXT NOT NULL,run_id TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL,delivered_at INTEGER);`);
     this.seedAttempts();
   }
   seedAttempts(){this.db.prepare(`INSERT OR IGNORE INTO run_attempts(id,decision_id,status,attempts,retry_at,lease_until,result,error,created) SELECT id,id,status,attempts,retry_at,lease_until,result,error,created FROM plan_decisions`).run()}
   close(){if(this.db){this.db.close();this.db=null}}
   record(user,session,event,summary={}){this.db.prepare('INSERT INTO workflow_events VALUES(?,?,?,?,?)').run(user,session,Date.now(),event,JSON.stringify(summary))}
   activity(user,session){return this.db.prepare('SELECT at,event,summary FROM workflow_events WHERE user_id=? AND session_id=? ORDER BY rowid DESC LIMIT 20').all(user,session).map(r=>({...r,summary:JSON.parse(r.summary)}))}
+  queueReport(user,session,item,value){
+    const run=value?.run;if(!terminal.has(run?.status)||run.cleanup_pending||!run.run_id)return;
+    const id=JSON.stringify([user,session,run.run_id,run.status]);
+    const payload={ok:true,event:'dj_run_completed',workspace_root:item.workspace_root,task_id:item.task_id,plan_version:item.plan_version,title:item.title,...value};
+    this.db.prepare("INSERT OR IGNORE INTO run_report_outbox(id,user_id,session_id,run_id,payload,status,created) VALUES(?,?,?,?,?,'pending',?)")
+      .run(id,user,session,run.run_id,JSON.stringify(payload),Date.now());
+  }
+  async publishReports(){
+    if(this.publishing||!this.db||!this.publishReport)return;this.publishing=true;
+    try{
+      const rows=this.db.prepare("SELECT * FROM run_report_outbox WHERE status='pending' AND retry_at<=? ORDER BY created LIMIT 10").all(Date.now());
+      for(const row of rows){
+        try{
+          await this.publishReport(row.user_id,row.session_id,JSON.parse(row.payload));
+          this.db.prepare("UPDATE run_report_outbox SET status='delivered',attempts=attempts+1,delivered_at=? WHERE id=? AND status='pending'").run(Date.now(),row.id);
+          this.record(row.user_id,row.session_id,'run_report_dispatched',{run_id:row.run_id});
+        }catch(error){
+          const attempts=row.attempts+1;
+          this.db.prepare("UPDATE run_report_outbox SET attempts=?,retry_at=? WHERE id=? AND status='pending'")
+            .run(attempts,Date.now()+Math.min(60000,1000*2**Math.min(attempts,6)),row.id);
+          this.record(row.user_id,row.session_id,'run_report_dispatch_failed',{run_id:row.run_id,attempt:attempts,code:error?.code||'REPORT_DISPATCH_FAILED',message:String(error?.message||error).slice(0,500)});
+        }
+      }
+    }finally{this.publishing=false}
+  }
   remember(user,session,ref){
     if(!user||!session||!ref?.workspace_root||!ref.task_id||!ref.plan_version||!ref.content_hash)return;
     const old=this.db.prepare('SELECT ref FROM session_plans WHERE user_id=? AND session_id=? AND plan_key=?').get(user,session,keyOf(ref));
@@ -60,6 +86,7 @@ export class PlanWorkflow {
         if(!value.run)throw new Error('Invalid Run response');
         this.db.prepare('UPDATE run_attempts SET result=?,error=NULL,refreshed_at=? WHERE id=?').run(JSON.stringify(value),Date.now(),a.id);
         if(value.run.status!==item.run.status||value.run.execution_phase!==item.run.execution_phase)this.record(user,session,'run_status_changed',{task_id:item.task_id,plan_version:item.plan_version,run_id:value.run.run_id,status:value.run.status,phase:value.run.execution_phase,error_code:value.run.error_code});
+        this.queueReport(user,session,item,value);
         return this.result(item,this.decision(user,session,item),{...a,result:JSON.stringify(value),error:null,refreshed_at:Date.now()});
       }catch(error){return {...item,connection_state:'reconnecting',connection_error:'运行状态暂时无法同步',diagnostic_code:error.code||'RUN_STATUS_UNAVAILABLE'}}
     })().finally(()=>this.refreshing.delete(a.id));this.refreshing.set(a.id,promise);return promise;
@@ -165,6 +192,7 @@ export class PlanWorkflow {
           this.db.prepare("UPDATE run_attempts SET status='submitted',result=?,error=NULL,lease_until=0 WHERE id=?").run(JSON.stringify(result),row.id);
           this.db.prepare("UPDATE plan_decisions SET status='submitted',result=?,error=NULL WHERE id=?").run(JSON.stringify(result),row.decision_id);
           this.record(row.user_id,row.session_id,'run_submitted',{task_id:ref.task_id,plan_version:ref.plan_version,decision_id:row.decision_id,attempt_id:row.id,retry_of:row.retry_of,request_id:'decision:'+row.id,run_id:result.run?.run_id});
+          this.queueReport(row.user_id,row.session_id,ref,result);
         }catch(error){
           const message=String(error.message||error),blocked=row.attempts>=7||terminalCodes.some(code=>message.includes(code));
           this.db.prepare('UPDATE run_attempts SET status=?,error=?,retry_at=?,lease_until=0 WHERE id=?').run(blocked?'blocked':'queued',message.slice(0,2000),Date.now()+Math.min(60000,1000*2**Math.min(row.attempts,6)),row.id);

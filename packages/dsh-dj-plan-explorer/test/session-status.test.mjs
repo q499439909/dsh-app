@@ -22,3 +22,7 @@ test('network failure retains the last Run and hides transport/internal instruct
 test('expired authentication stops automatic polling and offers login',async()=>{
  const f=fixture(async()=>({status:401}));await f.settle();assert.match(JSON.stringify(f.render()),/重新登录/);assert.equal(f.timers.filter(t=>t.ms!==10000).length,0);
 });
+test('the persistent Run card shows operator and step progress in place',async()=>{
+ const f=fixture(async()=>({ok:true,status:200,json:async()=>({ok:true,plans:[{task_id:'t',plan_version:'plan_v001',workflow_state:'running',decision_id:'d',run:{run_id:'run_1',status:'running',steps:[{process_index:0,operator_name:'first_mapper',status:'succeeded'},{process_index:1,operator_name:'second_filter',status:'running'}]}}]})}));
+ await f.settle();const tree=JSON.stringify(f.render());assert.match(tree,/second_filter/);assert.match(tree,/第 2\/2 步/);assert.match(tree,/50%/);
+});

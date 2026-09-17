@@ -40,6 +40,25 @@ test('terminal failure is persisted, shown accurately and not polled again',asyn
   const again=await workflow.confirm('alice','s',ref,()=>assert.fail('repeat approval'));
   assert.equal(again.run.status,'failed');
 });
+test('a terminal Run wakes the original conversation exactly once with structured facts',async t=>{
+  const reports=[];let status='running';
+  const {workflow,invoke}=fixture(t,{publishReport:async(user,session,report)=>reports.push({user,session,report})});
+  workflow.invoke=async(user,name,args)=>name==='get_run'?{ok:true,run:{
+    run_id:args.run_id,status,execution_phase:status==='succeeded'?'complete':'processing',
+    progress:{processed:10,total:10,percent:100},result_ref:'result_1',duration_seconds:12,
+  }}:invoke(user,name,args);
+  await workflow.approve('alice','session_a',ref);
+  await workflow.snapshot('alice','session_a');
+  assert.equal(reports.length,0,'running progress must not wake the model');
+  status='succeeded';
+  await workflow.refresh('alice','session_a',workflow.list('alice','session_a')[0],{force:true});
+  await workflow.publishReports();
+  await workflow.publishReports();
+  assert.equal(reports.length,1);
+  assert.equal(reports[0].session,'session_a');
+  assert.equal(reports[0].report.run.status,'succeeded');
+  assert.equal(reports[0].report.run.progress.percent,100);
+});
 test('an explicit retry creates one new attempt; repeated requests replay it',async t=>{
   const {workflow,invoke}=fixture(t);const ids=[];
   workflow.invoke=async(user,name,args)=>{
@@ -113,9 +132,11 @@ test('legacy approval with unaccepted gaps requires explicit acceptance on retry
 });
 
 test('terminal status with pending cleanup keeps refreshing until retry is safe',async t=>{
- const {workflow,invoke}=fixture(t);let pending=true,reads=0;
+ const reports=[];const {workflow,invoke}=fixture(t,{publishReport:async(...args)=>reports.push(args)});let pending=true,reads=0;
  workflow.invoke=async(u,n,a)=>n==='get_run'?(reads++,{ok:true,run:{run_id:a.run_id,status:'cancelled',cleanup_pending:pending}}):invoke(u,n,a);
  await workflow.approve('alice','s',ref);let item=(await workflow.snapshot('alice','s'))[0];assert.equal(item.run.cleanup_pending,true);
+ await workflow.publishReports();assert.equal(reports.length,0);
  pending=false;item=await workflow.refresh('alice','s',item,{force:true});assert.equal(item.run.cleanup_pending,false);
+ await workflow.publishReports();assert.equal(reports.length,1);
  await workflow.refresh('alice','s',item,{force:true});assert.equal(reads,2);
 });

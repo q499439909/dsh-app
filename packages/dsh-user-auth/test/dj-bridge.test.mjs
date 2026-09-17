@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { trustedHeaders, apply as applyBridge, verifyContract } from "../lib/dj-bridge.js";
+import { inject, trustedHeaders, apply as applyBridge, runReportPrompt, verifyContract, wakeRunReport } from "../lib/dj-bridge.js";
 
 
 const cleanups=[];
@@ -87,6 +87,19 @@ test('a restarted compatible server is renegotiated before replaying the same re
     await definition.execute({workspace_root:'ignored'}, {callId:'one',signal:new AbortController().signal,agent:{session:{id:'a',header:{cwd:'D:/alice'}}}});
     assert.deepEqual(ids,['a:one','a:one']);assert.equal(discoveries,2);
   } finally {globalThis.fetch=originalFetch;if(old===undefined)delete process.env.DSH_DJ_INTERNAL_TOKEN;else process.env.DSH_DJ_INTERNAL_TOKEN=old;}
+});
+
+test('terminal reports wake the owning Agent as a plugin follow-up',()=>{
+  assert.ok(inject.includes('agents'),'Cordis must authorize access to the Agent registry');
+  let message;
+  const ctx={identityAccess:{sessionOwner:id=>id==='session_a'?'alice':undefined},agents:{get:id=>id==='session_a'?{followup:value=>{message=value}}:undefined}};
+  const report={event:'dj_run_completed',task_id:'task_a',run:{run_id:'run_1',status:'succeeded',progress:{processed:10,total:10}}};
+  wakeRunReport(ctx,'alice','session_a',report);
+  assert.equal(message.role,'user');
+  assert.equal(message.source.kind,'plugin');
+  assert.match(message.content[0].text,/directly to the user/);
+  assert.match(runReportPrompt(report),/"status":"succeeded"/);
+  assert.throws(()=>wakeRunReport(ctx,'bob','session_a',report),/owner changed/);
 });
 
 test('structured confirmation forwards the live caller and automatically dispatches, ordinary text cannot approve',async()=>{
