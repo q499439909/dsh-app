@@ -136,10 +136,11 @@ Set-Location D:/dsh-app
 - 2026-09-11 的专项记录：DJ `tests/tools/plan_flow` **208 passed、5 skipped**，DSH 相关测试 **39 passed**；真实浏览器曾验证两个 Plan 版本的结构化/卡片批准、Run 成功、刷新恢复和并发重复批准不重复启动。审批 canary 约 12.4 秒只覆盖**预先准备好方案之后**的闭环，不代表完整规划耗时。[实施与验收记录](langfuse-0790e0b4-remediation-implementation-2026-09-11.md)
 - 另一次本机 Broker/Docker 人脸场景曾用 500 张输入生成 30 条结果与 30 个 mask，并验证第二个任务复用 Runtime。那证明该历史配置和样例的执行路径，不证明当前 native 默认部署对所有模态已验收。[P0–P8 报告](p0-p8-implementation-report.zh-CN.md)
 - 当前接手检查只读核对了源码与本机服务可达性：DSH 根页面返回 200；对 `/mcp` 的普通 GET 返回 406。没有在本次文档工作中执行真实业务 Run、MCP JSON-RPC 握手或全量测试。
+- 2026-09-17 提交前的本地回归：DJ `tests/tools/plan_flow` **228 passed、5 skipped**，DSH 相关测试 **68 passed**。DJ 修复提交 `476c5de` 后，[GitHub pre-commit 检查通过](https://github.com/q499439909/data-juicer/actions/runs/35196259484)。这些结果仍不等于当前在线服务已重新部署或业务场景已完成端到端验收。
 
 ## 8. 尚未完成、当前工作树与接手优先级
 
-1. **先固化并复验工作树。** 更新日两仓库都有大量未提交改动；DJ 有多个 `plan_flow` 新模块仍未跟踪。当前 DSH 工作树的 `PlanWorkflow` 增加了终态报告 outbox，bridge 增加会话唤醒，页面增加步骤/进度展示。这些属于**源码已写、尚不能仅凭源码宣布已部署或端到端验证**的内容。接手者先分别查看 `git status --short`、`git diff`、未跟踪文件、部署 manifest 与在线构建身份；不要清理、覆盖或自动提交用户现有改动。
+1. **先核对提交与在线构建。** DSH 分支 `codex/user-authentication` 的交接提交为 `4f4ed4d`；DJ 分支 `codex/dj-plan-explorer` 的功能提交为 `fd0a81a`，CI 修复提交为 `476c5de`。更新时两仓库的跟踪文件已提交并推送；本机仍有未跟踪的数据库、用户数据、备份和临时分析目录，不属于源码交接，不能清理或上传。DSH 的 `PlanWorkflow` 终态报告 outbox、bridge 会话唤醒和页面步骤/进度展示属于**源码已写、尚不能仅凭源码宣布已部署或端到端验证**的内容。接手者先分别查看 `git status --short`、部署 manifest 与在线构建身份，再做回归。
 2. **业务正确性门禁。** 历史运镜案例中合法并成功运行的 V1 在六个样本上误判 3 个；V2 同样本 6/6，但同集调参与验证不能证明泛化。正式可复用算法需独立标注集、边界场景及语义验收。当前 `recipe.process` 必须非空，尚不支持纯脚本/纯后处理 Plan；不要为通过结构校验添加不影响结果的装饰算子。[案例复盘](../../DJ_DSH_HANDOFF.zh-CN.v3.md)
 3. **规划速度与收敛。** 历史慢会话 49 个模型步骤、约 40 分钟，主因是模型反复决策和过大检索上下文；工具响应缩小与重复请求提示已做，但完整流程 P95、硬预算和简单任务 quick 模式尚无完成验收。一次性小任务不应自动承担正式流水线全部成本。[选型与现状](../research/dj-agent-recommendation-2026-09-12.zh-CN.md)
 4. **结果交付。** 结果中心已有本机列表、预览、筛选和下载原型；Run 终态主动触发的持久 Result Publication、正式 `output_contract`、可恢复深链接、长期索引和 S3 Adapter 尚未完成。终态报告 outbox 的当前工作树改动需验证离线重连、重启、重复投递和失败恢复。[结果中心方案](dataset-results-center-development-plan.zh-CN.md)
