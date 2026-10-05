@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Results Center",
+    "description": "A sidebar panel that renders Data-Juicer run outputs: images, manifests, and metadata."
+  }
+}
