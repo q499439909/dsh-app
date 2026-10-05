@@ -1,0 +1,17 @@
+diff --git a/lib/index.js b/lib/index.js
+index 81a9e6935f1bf3cb0d95c7dac4579867ea75a312..3f0f19b0a3d458fc23ab7f41a7010c90839f795d 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1134,10 +1134,12 @@ var ReactLoopAgent = class {
+ 		};
+ 		const persistedReasoningEffort = persistedConfig?.provider === route.provider && persistedConfig.model === route.model && persistedHeader?.adapterDefaults?.reasoningEffort !== true ? persistedConfig.reasoningEffort : void 0;
+ 		const reasoningEffort = this.options.reasoningEffort ?? persistedReasoningEffort;
++		const temperature = this.options.temperature;
+ 		const maxTokens = this.options.maxTokens;
+ 		const seedConfig = deepFreeze(structuredClone(this.requestHeaderLogged ? requestProposal(persistedHeader) : {
+ 			...route,
+ 			...reasoningEffort === void 0 ? {} : { reasoningEffort },
++			...temperature === void 0 ? {} : { temperature },
+ 			...maxTokens === void 0 ? {} : { maxTokens }
+ 		}));
+ 		const proposedConfig = await this.dispatch.waterfall("agent/request", {

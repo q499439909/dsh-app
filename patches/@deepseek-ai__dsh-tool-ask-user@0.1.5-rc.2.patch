@@ -1,0 +1,70 @@
+diff --git a/lib/index.js b/lib/index.js
+index c842f22536062080a6ecea023bc8325c4dab7eff..b4a7d195e6fd76b982758c2a2027dc22d3e7c243 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -10,7 +10,28 @@ import "@deepseek-ai/dsh-user-questions";
+ */
+ const name = "tool-ask-user";
+ const inject = ["tools", "userQuestions"];
+-const description = "Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Send one or more questions, each with a stable id that will be echoed in the answer.";
++const description = "Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. Put reports, plans, evidence, and other review material in the assistant response before this call; send only the decision question and short choices here. Send one or more questions, each with a stable id that will be echoed in the answer.";
++const MAX_HEADER_CHARS = 80;
++const MAX_QUESTION_CHARS = 240;
++const MAX_OPTION_LABEL_CHARS = 80;
++const MAX_OPTION_DESCRIPTION_CHARS = 160;
++function assertPopupText(value, path, maxChars, singleLine) {
++	if (value === void 0) return;
++	if (value.length > maxChars) throw new Error(`${path} exceeds ${maxChars} characters. Put supporting detail in the assistant response and keep the popup focused on the decision.`);
++	if (singleLine && /[\r\n]/.test(value)) throw new Error(`${path} must be a single line. Put reports, plans, evidence, and other review material in the assistant response.`);
++}
++function validatePopupQuestions(questions) {
++	questions.forEach((question, questionIndex) => {
++		const prefix = `questions[${questionIndex}]`;
++		assertPopupText(question.header, `${prefix}.header`, MAX_HEADER_CHARS, true);
++		assertPopupText(question.question, `${prefix}.question`, MAX_QUESTION_CHARS, true);
++		question.options?.forEach((option, optionIndex) => {
++			const optionPrefix = `${prefix}.options[${optionIndex}]`;
++			assertPopupText(option.label, `${optionPrefix}.label`, MAX_OPTION_LABEL_CHARS, true);
++			assertPopupText(option.description, `${optionPrefix}.description`, MAX_OPTION_DESCRIPTION_CHARS, true);
++		});
++	});
++}
+ function apply(ctx) {
+ 	ctx.tools.register(defineTool({
+ 		name: "ask_user_question",
+@@ -31,11 +52,11 @@ function apply(ctx) {
+ 					question: {
+ 						type: "string",
+ 						required: true,
+-						description: "The specific question to ask the user."
++						description: "One short, single-line decision question (maximum 240 characters). Put supporting reports, plans, evidence, and review detail in the assistant response before this call."
+ 					},
+ 					header: {
+ 						type: "string",
+-						description: "Optional short heading for the question, such as \"Confirm\" or \"Choose Mode\"."
++						description: "Optional single-line heading of at most 80 characters, such as \"Confirm\" or \"Choose Mode\"."
+ 					},
+ 					options: {
+ 						type: "array",
+@@ -47,11 +68,11 @@ function apply(ctx) {
+ 								label: {
+ 									type: "string",
+ 									required: true,
+-									description: "Short user-facing option label."
++									description: "Short, single-line user-facing option label of at most 80 characters."
+ 								},
+ 								description: {
+ 									type: "string",
+-									description: "One sentence explaining the tradeoff or impact."
++									description: "At most one short, single-line sentence (maximum 160 characters) explaining the direct tradeoff or impact."
+ 								}
+ 							}
+ 						}
+@@ -94,6 +115,7 @@ function apply(ctx) {
+ 			}]
+ 		},
+ 		async execute(args, exec) {
++			validatePopupQuestions(args.questions);
+ 			return { answers: (await ctx.userQuestions.ask({
+ 				questions: args.questions.map((question) => ({
+ 					id: question.id,

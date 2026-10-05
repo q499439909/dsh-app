@@ -4,12 +4,14 @@
   "private": true,
   "packageManager": "pnpm@11.22.0",
   "scripts": {
+    "web": "dsh web --patch ./dsh-core.patch.yml --host 127.0.0.1 --port 57535",
+    "web:no-open": "dsh web --patch ./dsh-core.patch.yml --host 127.0.0.1 --port 57535 --no-open",
     "prototype:face-cpu": "powershell -ExecutionPolicy Bypass -File prototypes/buffalo-bisenet-cpu/run.ps1"
   },
   "dependencies": {
-    "@deepseek-ai/cordis-plugin-group": "^1.0.1",
-    "@deepseek-ai/dsh": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-web-fetch-http": "0.1.1-rc.2",
+    "@deepseek-ai/cordis-plugin-group": "~1.0.4",
+    "@deepseek-ai/dsh": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-web-fetch-http": "0.2.0-rc.2",
     "@dsh-dj/datasets": "file:packages/dsh-dj-datasets",
     "@dsh-dj/operator-library": "file:packages/dsh-dj-operator-library",
     "@dsh-dj/plan-explorer": "file:packages/dsh-dj-plan-explorer",

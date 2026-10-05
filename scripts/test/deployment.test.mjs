@@ -16,8 +16,8 @@ test('custom ports, source and workspace flow into one resolved deployment',()=>
   const patch=renderPatch(template,resolved,root);
   assert.ok(!patch.includes(':8010'));
   assert.ok(!patch.includes('D:\\dsh-app'));
-  assert.ok(patch.includes('transport: internal-http'));
-  assert.ok(!patch.includes('/mcp'));
+  assert.ok(patch.includes('transport: streamable-http'));
+  assert.ok(patch.includes('url: http://127.0.0.1:8123/mcp'));
   assert.equal((patch.match(/127\.0\.0\.1:8123/g)||[]).length,4);
 });
 
@@ -26,6 +26,12 @@ test('invalid deployment settings fail before launching processes',()=>{
   assert.throws(()=>resolveConfig('.',config,{djPort:'8010'}),/Invalid djPort/);
   assert.throws(()=>resolveConfig('.',config,{publicOrigin:'https://app.test/path'}),/exact/);
   assert.throws(()=>resolveConfig('.',config,{executionMode:'unknown'}),/executionMode/);
+});
+
+test('single-user MCP accepts the workspace selected by each Web session',()=>{
+  const launcher=fs.readFileSync(new URL('../../web-dj.ps1',import.meta.url),'utf8');
+  assert.match(launcher,/DJ_PLAN_FLOW_SINGLE_USER\s*=\s*'local'/);
+  assert.doesNotMatch(launcher,/DJ_PLAN_FLOW_WORKSPACE_ROOT\s*=/);
 });
 
 test('skill or patch content edits change fingerprints without requiring a git commit',()=>{

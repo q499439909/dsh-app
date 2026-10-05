@@ -44,6 +44,7 @@ $Port = $deployment.config.webPort
 $McpPort = $deployment.config.djPort
 $ExecutionMode = $deployment.config.executionMode
 $proxyUrl = $deployment.config.proxyUrl
+$singleUserMcp = $true
 $dshBin = Join-Path $dshRoot 'node_modules/@deepseek-ai/dsh/lib/bin.js'
 $patchFile = Join-Path $dshRoot '.dsh/deployment/dj.patch.yml'
 $runtimeProbe = Join-Path $dshRoot 'scripts/test-dj-runtime.ps1'
@@ -318,6 +319,38 @@ function Get-ListeningProcess {
         -ErrorAction SilentlyContinue
 }
 
+function Get-DshWebLaunchUrl {
+    param([int]$ProcessId)
+
+    $diagnosticRoot = Join-Path $WorkspaceRoot '.dsh/diagnostics/runtime'
+    $lifecyclePath = Join-Path $diagnosticRoot 'lifecycle.jsonl'
+    if (-not (Test-Path -LiteralPath $lifecyclePath -PathType Leaf)) {
+        return $null
+    }
+
+    $launchEvent = Get-Content -LiteralPath $lifecyclePath |
+        ForEach-Object {
+            try { $_ | ConvertFrom-Json } catch { $null }
+        } |
+        Where-Object { $_.event -eq 'process_started' -and $_.pid -eq $ProcessId } |
+        Select-Object -Last 1
+    if ($null -eq $launchEvent -or [string]::IsNullOrWhiteSpace([string]$launchEvent.launch_id)) {
+        return $null
+    }
+
+    $stdoutPath = Join-Path $diagnosticRoot "$($launchEvent.launch_id).stdout.log"
+    if (-not (Test-Path -LiteralPath $stdoutPath -PathType Leaf)) {
+        return $null
+    }
+
+    $urlMatch = Select-String -LiteralPath $stdoutPath -Pattern '^dsh web:\s+(?<url>http://\S+)' |
+        Select-Object -Last 1
+    if ($null -eq $urlMatch) {
+        return $null
+    }
+    return $urlMatch.Matches[0].Groups['url'].Value
+}
+
 function Test-IsExpectedDshWebProcess {
     param(
         [AllowNull()]
@@ -330,26 +363,28 @@ function Test-IsExpectedDshWebProcess {
     }
 
     $commandLine = [string]$Process.CommandLine
+    $portPattern = '(?:^|\s)"?--port"?\s+"?{0}"?(?:\s|$)' -f $TargetPort
     return (
         $Process.Name -eq 'node.exe' -and
         $commandLine.IndexOf($dshBin, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
         $commandLine.IndexOf($patchFile, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-        $commandLine -match '(?:^|\s)web(?:\s|$)' -and
-        $commandLine -match "--port\s+$TargetPort(?:\s|$)"
+        $commandLine -match '(?:^|\s)"?web"?(?:\s|$)' -and
+        $commandLine -match $portPattern
     )
 }
 
 function Get-OtherDshWebProcesses {
     param([int]$ExceptPort)
 
+    $exceptPortPattern = '(?:^|\s)"?--port"?\s+"?{0}"?(?:\s|$)' -f $ExceptPort
     return @(
         Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
         Where-Object {
             $commandLine = [string]$_.CommandLine
             $commandLine.IndexOf($dshBin, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
             $commandLine.IndexOf($patchFile, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-            $commandLine -match '(?:^|\s)web(?:\s|$)' -and
-            $commandLine -notmatch "--port\s+$ExceptPort(?:\s|$)"
+            $commandLine -match '(?:^|\s)"?web"?(?:\s|$)' -and
+            $commandLine -notmatch $exceptPortPattern
         }
     )
 }
@@ -427,6 +462,7 @@ if (-not (Test-TcpPort -TargetPort $McpPort)) {
         PYTHONIOENCODING = 'utf-8'
         DJ_PLAN_FLOW_CONFIG_FILE = $mcpEnvFile
         DJ_PLAN_FLOW_EXECUTION_MODE = $ExecutionMode
+        DJ_PLAN_FLOW_SINGLE_USER = 'local'
         DSH_DJ_INTERNAL_TOKEN = $internalToken
     }
     $allowedMcpEnvironmentNames = @(
@@ -474,7 +510,7 @@ $otherDshProcesses = Get-OtherDshWebProcesses -ExceptPort $Port
 if ($otherDshProcesses.Count -gt 0) {
     $descriptions = @(
         $otherDshProcesses | ForEach-Object {
-            $otherPort = if ([string]$_.CommandLine -match '--port\s+(\d+)') { $matches[1] } else { 'unknown' }
+            $otherPort = if ([string]$_.CommandLine -match '"?--port"?\s+"?(\d+)"?') { $matches[1] } else { 'unknown' }
             "PID $($_.ProcessId) on port $otherPort"
         }
     )
@@ -491,14 +527,26 @@ if ($null -ne $listeningProcess) {
         throw "Port $Port is already owned by PID $($listeningProcess.ProcessId), which is not the expected DSH Web process."
     }
 
-    $runningDeployment = Invoke-RestMethod -Uri "${url}auth/deployment" -TimeoutSec 5
-    if ($runningDeployment.deploymentId -ne $deployment.deploymentId) { throw 'Running DSH deployment differs; restart DSH to load the new plugins, skills and configuration.' }
+    if (-not $singleUserMcp) {
+        $runningDeployment = Invoke-RestMethod -Uri "${url}auth/deployment" -TimeoutSec 5
+        if ($runningDeployment.deploymentId -ne $deployment.deploymentId) { throw 'Running DSH deployment differs; restart DSH to load the new plugins, skills and configuration.' }
+    }
     Write-Host "Using existing DSH DJ at $url (PID $($listeningProcess.ProcessId))"
-    if (-not $NoOpen) { Start-Process $url }
+    if (-not $NoOpen) {
+        $launchUrl = Get-DshWebLaunchUrl -ProcessId $listeningProcess.ProcessId
+        if ([string]::IsNullOrWhiteSpace($launchUrl)) {
+            Write-Warning 'The existing DSH authentication URL could not be recovered. Restart DSH DJ so it can open a fresh authenticated URL.'
+        } else {
+            Start-Process $launchUrl
+        }
+    }
     exit 0
 }
 
-$dshArgumentList = @($dshBin, 'web', '--patch', $patchFile, '--host', '127.0.0.1', '--port', [string]$Port, '--no-open')
+$dshArgumentList = @($dshBin, 'web', '--patch', $patchFile, '--host', '127.0.0.1', '--port', [string]$Port)
+if ($NoOpen) {
+    $dshArgumentList += '--no-open'
+}
 if ($null -ne $DshArgs) {
     $dshArgumentList += @($DshArgs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 }
@@ -527,11 +575,19 @@ try {
     for ($attempt = 0; $attempt -lt 40 -and -not $process.HasExited; $attempt++) {
         Start-Sleep -Milliseconds 250
         try {
-            $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1
-            if ($response.StatusCode -eq 200) {
-                $runningDeployment = Invoke-RestMethod -Uri "${url}auth/deployment" -TimeoutSec 5
-                if ($runningDeployment.deploymentId -ne $deployment.deploymentId) { throw 'DSH has not loaded the requested deployment.' }
-                if (-not $NoOpen) { Start-Process $url }
+            $ready = if ($singleUserMcp) {
+                Test-TcpPort -TargetPort $Port
+            } else {
+                $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1
+                $response.StatusCode -eq 200
+            }
+            if ($ready) {
+                if (-not $singleUserMcp) {
+                    $runningDeployment = Invoke-RestMethod -Uri "${url}auth/deployment" -TimeoutSec 5
+                    if ($runningDeployment.deploymentId -ne $deployment.deploymentId) { throw 'DSH has not loaded the requested deployment.' }
+                }
+                # DSH 0.2 opens its token-bearing URL itself unless --no-open
+                # was requested. Opening the bare URL here produces a 401.
                 $mcpRestarts = 0
                 $mcpExitRecorded = $false
                 while (-not $process.HasExited) {

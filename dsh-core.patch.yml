@@ -1,0 +1,25 @@
+- id: skill-filesystem
+  disabled: false
+  config:
+    customSkillDirs:
+      - "D:/dsh-app/.dsh/skills"
+- id: tool-pwsh
+  disabled: false
+- id: tool-fs
+  disabled: false
+- id: tool-fs-search
+  disabled: false
+- id: tool-jobs
+  disabled: false
+- id: web
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+- id: tool-web
+  disabled: false
+  config:
+    search: true
+    fetch: true
+    searchTimeoutMs: 60000
+    fetchTimeoutMs: 30000
+    fetchMaxOutputChars: 120000
