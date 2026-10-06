@@ -28,10 +28,10 @@ acceptance_checks:
 
 输出路径相对本次 Run 输出目录。recipe producer 只能对应 recipe 的导出文件。图像报告优先配置 `postprocess: [{kind: image_audit, audit_mode: full, rules: [{id: face_count, field: face_counts, min: 1, max: 1}]}]`。其规则字段从算子 schema 获取；recipe 仅包含打分过滤器，宿主在 Run 中保留全量样本，再生成 decisions/kept/summary。cascade 模式只省后续判定，不承诺节省模型推理成本；缺失分数不等于 0。零保留默认合法。
 
-报告、复制图片等由 `producer: {kind: postprocess, index: 0}` 指向真实后处理步骤。原生组件无法满足时，脚本要在 prepare_plan 前写好并通过 postprocess 引用进入快照。不要承诺在运行后另写脚本补业务工作。
+报告等业务判断由 `producer: {kind: postprocess, index: 0}` 指向真实后处理步骤。任务脚本只生成仍引用原始媒体的结果 JSONL，不自行复制媒体或发明任务专用路径规则。需要可直接打包的数据集时，在判断步骤之后声明通用 `dataset_package`：每项指定输出 JSONL `path` 与目标 `media_dir`；运行器统一复制最终入选媒体，并把 JSONL 中的媒体字段改写为相对 manifest 的输出路径。此时最终 JSONL 和媒体目录都应在 `expected_outputs` 中声明，并把 producer 指向该 `dataset_package` 后处理步骤。原生组件无法满足时，脚本要在 prepare_plan 前写好并通过 postprocess 引用进入快照。不要承诺在运行后另写脚本补业务工作。
 
 原生审计同时生成 report.md，报告消费同一份 decisions/summary，不另写脚本重复判定。严格小于阈值设置 `max_inclusive: false`；输出字段以工具返回的 output_schemas 为准。
 
 支持的检查：`row_count`、`field_equals`、`audit_consistency` 和 `manual`。存在 acceptance_criteria 时，检查 criterion 必须绑定其中的准确文本。audit_consistency 的 output_id 指向原生 summary；主观标准没有证据时保持 unverified，不能用数量范围代替质量证据。
 
-prepare_plan 自动冻结本地输入及引用媒体。路径不支持或快照超限时报告限制，不绕过工具运行。新计划展示输入快照、输出、步骤、重要参数和运行阻断。修改计划使用 task_id + base_plan_version，旧版本不编辑。
+prepare_plan 自动冻结输入 manifest 和引用媒体的哈希清单，但不复制原始媒体。原始媒体保持只读；批准或运行前发现缺失、移动或内容变化时失败关闭。新计划展示输入引用、输出、步骤、重要参数和运行阻断。修改计划使用 task_id + base_plan_version，旧版本不编辑。

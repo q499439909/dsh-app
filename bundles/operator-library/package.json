@@ -1,6 +1,6 @@
 {
   "name": "@local/operator-library",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Operator Library: a sidebar panel to browse, filter, search, and inspect all Data-Juicer operators with descriptions and parameters.",
   "icon": "./icon.svg",

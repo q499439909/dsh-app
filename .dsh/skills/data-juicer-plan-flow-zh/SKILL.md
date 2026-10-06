@@ -27,7 +27,7 @@ API 算子必须失败关闭：使用 `skip_op_error: false`。请求被拒、�
 
 ## 能力缺口
 
-先判断是未找到、语义不满足还是环境不可用。考虑已有算子组合；外围报告/复制可以用进入 Plan 的 postprocess。核心新处理需要自定义算子时读取 [开发指南](references/custom-operators.md)，使用 authoring spec → develop → job/验证结果 → schema → Plan。
+先判断是未找到、语义不满足还是环境不可用。考虑已有算子组合；外围报告可以用进入 Plan 的 postprocess。可直接打包的媒体数据集统一使用 `dataset_package`：业务步骤只生成引用原始媒体的结果 JSONL，通用打包步骤复制最终入选媒体并改写为输出相对路径；不要让每个任务脚本各自实现复制规则。核心新处理需要自定义算子时读取 [开发指南](references/custom-operators.md)，使用 authoring spec → develop → job/验证结果 → schema → Plan。
 
 新增费用、权限或超出既定范围的资源使用先确认。已有开发授权且范围未变时直接推进。测试通过不等于任意数据上的语义质量通过；预算耗尽或不可恢复失败时说明问题，不用新任务/新算子 ID 绕过限制。
 

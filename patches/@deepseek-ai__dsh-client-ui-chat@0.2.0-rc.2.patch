@@ -1,0 +1,24 @@
+diff --git a/lib/client.js b/lib/client.js
+index f997683d803c6745088936385ab0632cea49ea6f..73b9e16bb78f58ab33207703a80eb92f638f46f2 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -1660,6 +1660,9 @@ window.__ModuleLoader__.load({
+ 			const location = node?.location;
+ 			return location?.kind === "turn" || location?.kind === "step" ? location.turn.turn : void 0;
+ 		}
++		function isUserQuestionLeadIn(node, groupPart) {
++			return groupPart !== "reasoning" && node?.kind === "assistant-step" && hasAssistantReplyContent(node.data.blocks) && node.data.blocks.some((block) => block.kind === "tool-call" && block.name === "ask_user_question");
++		}
+ 		/**
+ 		* Subscribe, apply Turn-process visibility, and dispatch one stable Context key.
+ 		* Policy reads select this seat's own conclusion, so a mode change re-renders
+@@ -1686,7 +1689,8 @@ window.__ModuleLoader__.load({
+ 			]);
+ 			const foldCompleted = usePresentation((policy) => policy.foldCompletedTurns);
+ 			const processWindowReady = processSpec !== void 0 && processPresentation !== void 0 && foldCompleted && processPresentation.turn === processSpec.turn && (processPresentation.turnStarted || processPresentation.turnClosed);
+-			const processMember = routedNode !== void 0 && processWindowReady && !TURN_PROCESS_INDEPENDENT_KINDS.has(routedNode.kind) && routedNode.anchorSeq >= processSpec.processStartSeq && (liveProcess || processSpec.answerAnchorSeq === null || routedNode.anchorSeq < processSpec.answerAnchorSeq || groupPart === "reasoning" && routedNode.kind === "assistant-step" && routedNode.data.step === processSpec.answerStep);
++			const userQuestionLeadIn = isUserQuestionLeadIn(routedNode, groupPart);
++			const processMember = routedNode !== void 0 && processWindowReady && !userQuestionLeadIn && !TURN_PROCESS_INDEPENDENT_KINDS.has(routedNode.kind) && routedNode.anchorSeq >= processSpec.processStartSeq && (liveProcess || processSpec.answerAnchorSeq === null || routedNode.anchorSeq < processSpec.answerAnchorSeq || groupPart === "reasoning" && routedNode.kind === "assistant-step" && routedNode.data.step === processSpec.answerStep);
+ 			const processAnswer = routedNode !== void 0 && processWindowReady && !liveProcess && groupPart !== "reasoning" && routedNode.kind === "assistant-step" && routedNode.data.step === processSpec.answerStep;
+ 			const ownsDisclosure = routedNode?.kind === "turn-process" || processAnswer;
+ 			const foldable = processWindowReady && (liveProcess || processMember || ownsDisclosure);

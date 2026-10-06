@@ -37,6 +37,15 @@ window.__ModuleLoader__.load({
 				mod_video: "视频",
 				mod_multimodal: "多模态",
 				mod_general: "通用",
+				cat_mapper: "映射器",
+				cat_filter: "过滤器",
+				cat_deduplicator: "去重器",
+				cat_selector: "选择器",
+				cat_aggregator: "聚合器",
+				cat_grouper: "分组器",
+				cat_pipeline: "流水线",
+				mine: "自定义",
+				experimental: "实验性",
 				parameters: "参数",
 				required: "必填",
 				optional: "可选",
@@ -74,6 +83,15 @@ window.__ModuleLoader__.load({
 				mod_video: "Video",
 				mod_multimodal: "Multimodal",
 				mod_general: "General",
+				cat_mapper: "Mapper",
+				cat_filter: "Filter",
+				cat_deduplicator: "Deduplicator",
+				cat_selector: "Selector",
+				cat_aggregator: "Aggregator",
+				cat_grouper: "Grouper",
+				cat_pipeline: "Pipeline",
+				mine: "Custom",
+				experimental: "Experimental",
 				parameters: "Parameters",
 				required: "Required",
 				optional: "Optional",
@@ -88,6 +106,13 @@ window.__ModuleLoader__.load({
 		};
 
 		const css = `
+[data-category="mapper"]{--opx-cat:#3b82f6}
+[data-category="filter"]{--opx-cat:#f97316}
+[data-category="deduplicator"]{--opx-cat:#8b5cf6}
+[data-category="selector"]{--opx-cat:#06b6d4}
+[data-category="aggregator"]{--opx-cat:#22c55e}
+[data-category="grouper"]{--opx-cat:#ec4899}
+[data-category="pipeline"]{--opx-cat:#6366f1}
 .opXRoot{height:100%;min-width:0;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-size:14px}
 .opXHeader{flex:none;display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .opXHeadText{min-width:0;flex:1}
@@ -97,6 +122,9 @@ window.__ModuleLoader__.load({
 .opXIconBtn:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
 .opXBody{flex:1;min-height:0;overflow:auto;padding:16px 20px 28px}
 .opXToolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.opXSearchWrap{position:relative;flex:1;min-width:220px;display:flex}
+.opXSearchWrap .opXInput{width:100%;padding-left:32px}
+.opXSearchIcon{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--dsw-alias-label-secondary);pointer-events:none}
 .opXInput{flex:1;min-width:220px;padding:7px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:13px}
 .opXInput:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}
 .opXSelect{padding:6px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:12.5px;max-width:180px}
@@ -107,20 +135,27 @@ window.__ModuleLoader__.load({
 .opXChips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .opXChip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-bg-layer-1);font-size:11.5px;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit}
 .opXChip:hover{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}
+.opXGroupHead{--opx-cat:var(--dsw-alias-brand-primary);position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px;padding:10px 2px 8px;margin:10px 0;background:var(--dsw-alias-bg-base);border-bottom:1px solid var(--dsw-alias-border-l1)}
+.opXDot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--opx-cat)}
+.opXGroupName{font-size:13.5px;font-weight:650}
+.opXGroupEn{font-size:11.5px;color:var(--dsw-alias-label-secondary)}
+.opXGroupCount{font-size:12px;color:var(--dsw-alias-label-secondary);margin-left:auto}
 .opXGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:10px}
-.opXCard{display:flex;flex-direction:column;gap:8px;text-align:left;padding:12px 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1);cursor:pointer;font:inherit;color:inherit}
-.opXCard:hover{border-color:var(--dsw-alias-brand-primary)}
+.opXCard{--opx-cat:var(--dsw-alias-brand-primary);display:flex;flex-direction:column;gap:8px;text-align:left;padding:12px 14px;border:1px solid var(--dsw-alias-border-l2);border-left:3px solid var(--opx-cat);border-radius:10px;background:var(--dsw-alias-bg-layer-1);cursor:pointer;font:inherit;color:inherit}
+.opXCard:hover{border-color:var(--opx-cat);background:var(--dsw-alias-bg-layer-2)}
 .opXCardTop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .opXNames{min-width:0}
 .opXNameZh{font-size:13.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .opXNameEn{font-size:11.5px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
-.opXCat{flex:none;padding:1px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);font-size:10.5px;color:var(--dsw-alias-brand-primary)}
+.opXCat{--opx-cat:var(--dsw-alias-brand-primary);flex:none;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--opx-cat) 12%,transparent);font-size:10.5px;font-weight:600;color:var(--opx-cat)}
+.opXMine{display:inline-flex;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,transparent);font-size:10.5px;font-weight:600;color:var(--dsw-alias-brand-primary)}
+.opXStatus{display:inline-flex;padding:1px 7px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);font-size:10.5px;color:var(--dsw-alias-label-secondary)}
 .opXPending{font-size:10px;color:var(--dsw-alias-state-warn-primary);margin-left:5px}
 .opXDesc{margin:0;font-size:12.5px;color:var(--dsw-alias-label-secondary);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .opXTags{display:flex;flex-wrap:wrap;gap:4px}
 .opXTag{display:inline-flex;padding:1px 7px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);font-size:10.5px;color:var(--dsw-alias-label-secondary)}
 .opXDetail{max-width:860px}
-.opXHero{display:flex;flex-direction:column;gap:8px;padding:16px 18px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
+.opXHero{--opx-cat:var(--dsw-alias-brand-primary);display:flex;flex-direction:column;gap:8px;padding:16px 18px;border:1px solid var(--dsw-alias-border-l2);border-top:3px solid var(--opx-cat);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
 .opXHeroName{font-size:16px;font-weight:650}
 .opXHeroEn{font-size:12px;color:var(--dsw-alias-label-secondary);word-break:break-all}
 .opXHeroMeta{font-size:12px;color:var(--dsw-alias-label-secondary)}
@@ -152,10 +187,18 @@ window.__ModuleLoader__.load({
 .opXErr{color:var(--dsw-alias-state-error-primary);font-size:12.5px;word-break:break-all}
 `;
 
-		function modalityLabel(value) {
-			const key = `mod_${String(value)}`;
+		function localeLabel(prefix, value) {
+			const key = `${prefix}${String(value)}`;
 			const text = T(key);
 			return text === key ? String(value) : text;
+		}
+
+		function modalityLabel(value) {
+			return localeLabel("mod_", value);
+		}
+
+		function categoryLabel(value) {
+			return localeLabel("cat_", value);
 		}
 
 		function providerLabel(value) {
@@ -209,6 +252,23 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		function SearchIcon() {
+			return h(
+				"svg",
+				{
+					viewBox: "0 0 24 24",
+					className: "opXSearchIcon",
+					"aria-hidden": "true",
+					fill: "none",
+					stroke: "currentColor",
+					strokeWidth: 2,
+					strokeLinecap: "round",
+				},
+				h("circle", { cx: 11, cy: 11, r: 7 }),
+				h("path", { d: "m20 20-3.5-3.5" }),
+			);
+		}
+
 		function StateMessage({ title, hint, error, actionLabel, onAction }) {
 			return h(
 				"div",
@@ -224,9 +284,10 @@ window.__ModuleLoader__.load({
 			const modalities = Array.isArray(op.modalities) ? op.modalities : [];
 			const devices = Array.isArray(op.devices) ? op.devices : [];
 			const desc = op.description_zh || op.description || "";
+			const hasTags = modalities.length > 0 || devices.length > 0 || op.provider === "user" || op.status === "experimental";
 			return h(
 				"button",
-				{ type: "button", className: "opXCard", onClick: () => onOpen(op) },
+				{ type: "button", className: "opXCard", "data-category": op.category || undefined, onClick: () => onOpen(op) },
 				h(
 					"div",
 					{ className: "opXCardTop" },
@@ -241,13 +302,15 @@ window.__ModuleLoader__.load({
 						),
 						h("div", { className: "opXNameEn" }, op.name),
 					),
-					h("span", { className: "opXCat" }, op.category || "—"),
+					op.category ? h("span", { className: "opXCat", "data-category": op.category }, categoryLabel(op.category)) : null,
 				),
 				desc ? h("p", { className: "opXDesc" }, desc) : null,
-				modalities.length || devices.length
+				hasTags
 					? h(
 							"div",
 							{ className: "opXTags" },
+							op.provider === "user" ? h("span", { className: "opXMine" }, T("mine")) : null,
+							op.status === "experimental" ? h("span", { className: "opXStatus" }, T("experimental")) : null,
 							modalities.map((v) => h("span", { key: `m-${v}`, className: "opXTag" }, modalityLabel(v))),
 							devices.map((v) => h("span", { key: `d-${v}`, className: "opXTag" }, String(v).toUpperCase())),
 						)
@@ -315,7 +378,7 @@ window.__ModuleLoader__.load({
 				{ className: "opXDetail" },
 				h(
 					"div",
-					{ className: "opXHero" },
+					{ className: "opXHero", "data-category": operator.category || undefined },
 					h(
 						"div",
 						{ className: "opXCardTop" },
@@ -330,7 +393,9 @@ window.__ModuleLoader__.load({
 							),
 							h("div", { className: "opXHeroEn" }, operator.name),
 						),
-						h("span", { className: "opXCat" }, operator.category || "—"),
+						operator.category
+							? h("span", { className: "opXCat", "data-category": operator.category }, categoryLabel(operator.category))
+							: null,
 					),
 					h("div", { className: "opXHeroMeta" }, metaLine),
 					modalities.length || devices.length
@@ -360,6 +425,17 @@ window.__ModuleLoader__.load({
 				parameters.length
 					? parameters.map((parameter, index) => h(ParamCard, { parameter, key: parameter.name || index }))
 					: h("div", { className: "opXStateHint" }, T("noParameters")),
+			);
+		}
+
+		function GroupHead({ category, count }) {
+			return h(
+				"div",
+				{ className: "opXGroupHead", "data-category": category },
+				h("span", { className: "opXDot" }),
+				h("span", { className: "opXGroupName" }, categoryLabel(category)),
+				h("span", { className: "opXGroupEn" }, category),
+				h("span", { className: "opXGroupCount" }, `${count} ${T("countUnit")}`),
 			);
 		}
 
@@ -465,13 +541,35 @@ window.__ModuleLoader__.load({
 				});
 			}, [data, filters]);
 
+			/** Operators grouped by category, sections sorted by size (largest first). */
+			const groups = React.useMemo(() => {
+				const byCategory = new Map();
+				for (const op of filtered) {
+					const category = op.category || "other";
+					const bucket = byCategory.get(category);
+					if (bucket) {
+						bucket.push(op);
+					} else {
+						byCategory.set(category, [op]);
+					}
+				}
+				return [...byCategory.entries()].sort((a, b) => b[1].length - a[1].length);
+			}, [filtered]);
+
 			const total = data ? (typeof data.total === "number" ? data.total : data.operators.length) : 0;
 			const activeFilters = [
-				filters.category ? { key: "category", label: filters.category } : null,
+				filters.category ? { key: "category", label: categoryLabel(filters.category) } : null,
 				filters.modality ? { key: "modality", label: modalityLabel(filters.modality) } : null,
 				filters.device ? { key: "device", label: String(filters.device).toUpperCase() } : null,
 				filters.provider ? { key: "provider", label: providerLabel(filters.provider) } : null,
 			].filter(Boolean);
+
+			const gridOf = (operators) =>
+				h(
+					"div",
+					{ className: "opXGrid" },
+					operators.map((op) => h(OperatorCard, { op, key: op.candidate_id || op.name, onOpen: openDetail })),
+				);
 
 			const listBody = !data
 				? h(StateMessage, { title: T("loading") })
@@ -481,18 +579,23 @@ window.__ModuleLoader__.load({
 						h(
 							"div",
 							{ className: "opXToolbar" },
-							h("input", {
-								className: "opXInput",
-								value: filters.query,
-								placeholder: T("search"),
-								"aria-label": T("search"),
-								onChange: (e) => setFilter("query", e.target.value),
-							}),
+							h(
+								"div",
+								{ className: "opXSearchWrap" },
+								h(SearchIcon, null),
+								h("input", {
+									className: "opXInput",
+									value: filters.query,
+									placeholder: T("search"),
+									"aria-label": T("search"),
+									onChange: (e) => setFilter("query", e.target.value),
+								}),
+							),
 							h(
 								"select",
 								{ className: "opXSelect", value: filters.category, "aria-label": T("allCategories"), onChange: (e) => setFilter("category", e.target.value) },
 								h("option", { value: "" }, T("allCategories")),
-								(data.facets?.categories || []).map((v) => h("option", { value: v, key: v }, v)),
+								(data.facets?.categories || []).map((v) => h("option", { value: v, key: v }, categoryLabel(v))),
 							),
 							h(
 								"select",
@@ -530,11 +633,11 @@ window.__ModuleLoader__.load({
 								)
 							: null,
 						filtered.length
-							? h(
-									"div",
-									{ className: "opXGrid" },
-									filtered.map((op) => h(OperatorCard, { op, key: op.candidate_id || op.name, onOpen: openDetail })),
-								)
+							? filters.category
+								? gridOf(filtered)
+								: groups.map(([category, operators]) =>
+										h("div", { key: category }, h(GroupHead, { category, count: operators.length }), gridOf(operators)),
+									)
 							: h(StateMessage, { title: T("empty"), hint: T("emptyHint"), actionLabel: T("clearFilters"), onAction: clearFilters }),
 					);
 
@@ -591,8 +694,7 @@ window.__ModuleLoader__.load({
 					"operator-library: sidebar entry",
 				);
 				ctx.effect(
-					() =>
-						ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "operator-library" }, OperatorPanel)),
+					() => ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "operator-library" }, OperatorPanel)),
 					"operator-library: main panel",
 				);
 			},

@@ -93,7 +93,7 @@ An immutable, approved Data-Juicer recipe plus exact capability bindings, accept
 _Avoid_: Runtime, capability proposal
 
 **Dataset Snapshot**:
-An immutable staged copy of a task's input manifest and referenced local assets, with container-safe paths and verified hashes.
+An immutable staged input manifest plus a verified hash inventory of its referenced local assets. Native execution reads those assets from their original read-only workspace paths instead of copying them into each Plan.
 _Avoid_: Workspace mount, source folder
 
 **Run**:
