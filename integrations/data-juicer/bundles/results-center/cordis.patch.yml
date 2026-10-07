@@ -1,0 +1,3 @@
+- insert:
+    - id: results-center
+      name: '@local/results-center'

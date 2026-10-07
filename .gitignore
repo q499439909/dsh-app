@@ -46,3 +46,9 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 native/system/test/bin/
+
+# Local Data-Juicer integration credentials and generated runtime state.
+/\.local/
+/integrations/data-juicer/*.env
+/integrations/data-juicer/.runtime/
+/integrations/data-juicer/dsh-deployment.local.json

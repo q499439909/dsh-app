@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/q499439909/data-juicer.git",
+  "commit": "88df10ec6b5d39b72654370bd2bc4a360c2880b9",
+  "python": "3.12",
+  "extras": [
+    "tools",
+    "ai_services"
+  ]
+}

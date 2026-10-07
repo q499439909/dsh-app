@@ -1,0 +1,3 @@
+- insert:
+    - id: operator-library
+      name: '@local/operator-library'

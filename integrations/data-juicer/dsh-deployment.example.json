@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "djRoot": "../../.local/data-juicer",
+  "pythonExe": "../../.local/data-juicer/.venv/Scripts/python.exe",
+  "workspaceRoot": "../../.local/workspace",
+  "hfHome": "../../.local/cache/huggingface",
+  "webPort": 57535,
+  "djPort": 8010,
+  "executionMode": "native",
+  "proxyUrl": null,
+  "observability": false,
+  "publicOrigin": null
+}

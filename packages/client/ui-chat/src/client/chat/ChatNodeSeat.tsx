@@ -5,6 +5,7 @@ import type { ConversationLocationDataStore, ConversationTurnDataMap } from '@de
 import type { ChatNodeHookContext, ChatNodeOwnerProps, ChatViewSlotProps, UsePresentation } from '../contract/slots.ts'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { ChatNodeStore } from '../contract/snapshot.ts'
+import { hasAssistantReplyContent } from '../contract/assistant-content.ts'
 import { TURN_PROCESS_INDEPENDENT_KINDS, turnProcessAlwaysOpen } from '../contract/turn-process.ts'
 import { storedTurnProcessEntry } from '../stores.ts'
 import { useSearchableHidden } from './searchable-hidden.ts'
@@ -35,6 +36,13 @@ function turnDataOf(node: ChatNode | undefined): ConversationLocationDataStore<C
 function turnOf(node: ChatNode | undefined): number | undefined {
   const location = node?.location
   return location?.kind === 'turn' || location?.kind === 'step' ? location.turn.turn : undefined
+}
+
+function isUserQuestionLeadIn(node: ChatNode | undefined, groupPart: ChatNodeOwnerProps['groupPart']): boolean {
+  return groupPart !== 'reasoning'
+    && node?.kind === 'assistant-step'
+    && hasAssistantReplyContent(node.data.blocks)
+    && node.data.blocks.some(block => block.kind === 'tool-call' && block.name === 'ask_user_question')
 }
 
 /**
@@ -75,8 +83,10 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
     && foldCompleted
     && processPresentation.turn === processSpec.turn
     && (processPresentation.turnStarted || processPresentation.turnClosed)
+  const userQuestionLeadIn = isUserQuestionLeadIn(routedNode, groupPart)
   const processMember = routedNode !== undefined
     && processWindowReady
+    && !userQuestionLeadIn
     && !TURN_PROCESS_INDEPENDENT_KINDS.has(routedNode.kind)
     && routedNode.anchorSeq >= processSpec.processStartSeq
     && (liveProcess || processSpec.answerAnchorSeq === null || routedNode.anchorSeq < processSpec.answerAnchorSeq

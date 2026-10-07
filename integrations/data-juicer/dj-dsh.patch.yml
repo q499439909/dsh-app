@@ -1,0 +1,36 @@
+- id: skill-filesystem
+  disabled: false
+  config:
+    customSkillDirs:
+      - __DJ_SKILLS_DIR__
+- id: tool-pwsh
+  disabled: false
+- id: tool-fs
+  disabled: false
+- id: tool-fs-search
+  disabled: false
+- id: tool-jobs
+  disabled: false
+- id: web
+  config:
+    searchProvider: deepseek-official
+- id: tool-web
+  disabled: false
+  config:
+    search: true
+    fetch: false
+    searchTimeoutMs: 60000
+- insert:
+    - id: mcp-dj
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: dj
+        transport: streamable-http
+        url: __DJ_MCP_URL__
+        toolCallTimeoutMs: 1800000
+        failOnStartupError: true
+        reconnect:
+          enabled: true
+          initialDelayMs: 500
+          maxDelayMs: 30000
+          maxAttempts: 10

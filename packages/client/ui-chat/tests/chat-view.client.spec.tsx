@@ -2244,6 +2244,32 @@ describe('ChatView', () => {
     expect(members[0]?.getAttribute('hidden')).toBeNull()
   })
 
+  it('keeps the assistant lead-in for a user question visible when the completed process is folded', () => {
+    const questionLeadIn = {
+      ...assistant(3, 'Please choose a format', 1, 2),
+      blocks: [
+        { kind: 'text' as const, text: 'Please choose a format' },
+        { kind: 'tool-call' as const, callId: 'question-1', name: 'ask_user_question', argsRaw: '{}' },
+      ],
+    }
+    const h = makeHarness({
+      nodes: [
+        user(1, 'prepare the dataset'),
+        reasoningAssistant(2, 'inspect requirements', 1, 1),
+        questionLeadIn,
+        assistant(4, 'final answer', 1, 3),
+      ],
+      turnEnds: new Map([[1, 5]]),
+      turnTimings: new Map([[1, { startTime: 0, endTime: 5_000 }]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const leadIn = view.getByText('Please choose a format').closest<HTMLElement>('[data-chat-flow-kind="assistant-step"]')
+
+    expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
+    expect(leadIn?.hasAttribute('data-turn-process-member')).toBe(false)
+    expect(leadIn?.hasAttribute('hidden')).toBe(false)
+  })
+
   it('omits injected Context while folding and revealing the visible Turn process', () => {
     const h = makeHarness({
       nodes: [
